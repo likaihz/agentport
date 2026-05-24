@@ -1,3 +1,4 @@
+pub mod agentport_env;
 pub mod app_state;
 pub mod audit_log;
 pub mod central_repo;
