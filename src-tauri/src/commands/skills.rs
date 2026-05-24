@@ -7,6 +7,7 @@ use tauri::State;
 use walkdir::WalkDir;
 
 use crate::core::{
+    agentport_env,
     audit_log::AuditDraft,
     central_repo,
     error::AppError,
@@ -1440,9 +1441,20 @@ pub fn reimport_local_skill_internal(
 
 fn local_source_path_for_reimport(skill: &SkillRecord) -> Result<String, AppError> {
     match skill.source_type.as_str() {
-        "local_linked" => skill.source_ref_resolved.clone().ok_or_else(|| {
-            AppError::not_found("Linked local skill is missing its machine-local source path")
-        }),
+        "local_linked" => skill
+            .source_ref_resolved
+            .clone()
+            .or_else(|| {
+                skill.source_ref.as_deref().and_then(|origin| {
+                    agentport_env::linked_origin_path(origin)
+                        .ok()
+                        .flatten()
+                        .map(|path| path.to_string_lossy().to_string())
+                })
+            })
+            .ok_or_else(|| {
+                AppError::not_found("Linked local skill is missing its machine-local source path")
+            }),
         _ => skill
             .source_ref
             .clone()

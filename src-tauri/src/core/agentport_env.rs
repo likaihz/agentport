@@ -291,6 +291,40 @@ pub struct EnvBootstrapSkillReport {
     pub overwritten: bool,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MachineLocalOverlay {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub origins: BTreeMap<String, MachineLocalOrigin>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MachineLocalOrigin {
+    pub path: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EnvResourceActionReport {
+    pub ok: bool,
+    pub dry_run: bool,
+    pub items: Vec<EnvResourceActionItem>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EnvResourceActionItem {
+    pub id: String,
+    pub tool: String,
+    pub kind: String,
+    pub source_path: String,
+    pub target_path: String,
+    pub deploy: String,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backup_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 pub fn manifest_path() -> PathBuf {
     central_repo::skills_dir().join(MANIFEST_FILE)
 }
@@ -313,6 +347,39 @@ pub fn secrets_local_path() -> PathBuf {
 
 pub fn machine_backups_dir() -> PathBuf {
     machine_dir().join("backups")
+}
+
+pub fn read_machine_local_overlay() -> Result<MachineLocalOverlay> {
+    ensure_machine_local_overlay()?;
+    let path = machine_local_path();
+    if !path.exists() {
+        return Ok(MachineLocalOverlay::default());
+    }
+    let raw =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    if raw.trim().is_empty() {
+        return Ok(MachineLocalOverlay::default());
+    }
+    serde_yaml::from_str(&raw).with_context(|| format!("failed to parse {}", path.display()))
+}
+
+pub fn record_linked_origin_path(origin_id: &str, path: &Path) -> Result<()> {
+    let mut overlay = read_machine_local_overlay()?;
+    overlay.origins.insert(
+        origin_id.to_string(),
+        MachineLocalOrigin {
+            path: path.to_string_lossy().to_string(),
+            updated_at: Utc::now().to_rfc3339(),
+        },
+    );
+    write_yaml(&machine_local_path(), &overlay)
+}
+
+pub fn linked_origin_path(origin_id: &str) -> Result<Option<PathBuf>> {
+    Ok(read_machine_local_overlay()?
+        .origins
+        .get(origin_id)
+        .map(|origin| PathBuf::from(&origin.path)))
 }
 
 pub fn build_manifest_from_store(store: &SkillStore) -> Result<EnvManifest> {
@@ -392,6 +459,16 @@ pub fn build_lock_from_store(store: &SkillStore) -> Result<EnvLock> {
     })
 }
 
+fn build_current_machine_lock_from_store(store: &SkillStore) -> Result<EnvLock> {
+    let mut lock = build_lock_from_store(store)?;
+    for artifact in &mut lock.artifacts {
+        artifact.content_hash = current_artifact_content_hash(store, &artifact.id)
+            .ok()
+            .flatten();
+    }
+    Ok(lock)
+}
+
 pub fn write_current_environment(store: &SkillStore, overwrite: bool) -> Result<EnvWriteReport> {
     let manifest_path = manifest_path();
     let lock_path = lock_path();
@@ -405,6 +482,7 @@ pub fn write_current_environment(store: &SkillStore, overwrite: bool) -> Result<
         fs::create_dir_all(parent)?;
     }
     ensure_machine_local_overlay()?;
+    export_resource_artifacts_internal(store, false, false)?;
 
     let manifest = build_manifest_from_store(store)?;
     let lock = build_lock_from_store(store)?;
@@ -517,7 +595,10 @@ pub fn diff_current_environment(
         .cloned()
         .collect::<Vec<_>>();
     let changed_artifacts = if lock_path().exists() {
-        changed_artifacts_from_locks(&read_lock()?, &build_lock_from_store(store)?)
+        changed_artifacts_from_locks(
+            &read_lock()?,
+            &build_current_machine_lock_from_store(store)?,
+        )
     } else {
         Vec::new()
     };
@@ -671,6 +752,145 @@ pub fn export_bootstrap_skill(
     })
 }
 
+pub fn export_resource_artifacts(
+    store: &SkillStore,
+    overwrite: bool,
+    dry_run: bool,
+) -> Result<EnvResourceActionReport> {
+    export_resource_artifacts_internal(store, overwrite, dry_run)
+}
+
+fn export_resource_artifacts_internal(
+    store: &SkillStore,
+    overwrite: bool,
+    dry_run: bool,
+) -> Result<EnvResourceActionReport> {
+    if !dry_run {
+        ensure_machine_local_overlay()?;
+    }
+    let mut items = Vec::new();
+
+    for tool in tool_service::list_tool_info(store) {
+        for resource in tool.resources {
+            if resource.kind == "skill" || !resource.exists {
+                continue;
+            }
+            let id = resource_artifact_id(&tool.key, &resource);
+            let source_path = PathBuf::from(&resource.path);
+            let target_path = resource_repository_path(&tool.key, &resource);
+            items.push(export_resource_path(
+                &id,
+                &tool.key,
+                &resource.kind,
+                &source_path,
+                &target_path,
+                &resource.deploy,
+                overwrite,
+                dry_run,
+            )?);
+        }
+    }
+
+    Ok(EnvResourceActionReport {
+        ok: items.iter().all(|item| item.error.is_none()),
+        dry_run,
+        items,
+    })
+}
+
+pub fn apply_resource_artifacts(
+    store: &SkillStore,
+    manifest: &EnvManifest,
+    dry_run: bool,
+) -> Result<EnvResourceActionReport> {
+    if !dry_run {
+        ensure_machine_local_overlay()?;
+    }
+    let resources = current_resource_lookup(store);
+    let mut items = Vec::new();
+
+    for artifact in manifest.artifacts.iter().filter(|artifact| {
+        artifact.kind != "skill" && artifact.source.source_type == "tool_resource"
+    }) {
+        let tool_key = artifact
+            .owner
+            .as_ref()
+            .filter(|owner| owner.owner_type == "tool")
+            .map(|owner| owner.id.as_str())
+            .or_else(|| {
+                artifact
+                    .deployed_to
+                    .first()
+                    .map(|target| target.tool.as_str())
+            })
+            .unwrap_or("unknown");
+        let source_path = resolve_repo_relative_path(&artifact.path);
+        let resource = resources.get(artifact.id.as_str());
+        let target_path = resource
+            .map(|resource| PathBuf::from(&resource.path))
+            .or_else(|| {
+                artifact
+                    .deployed_to
+                    .first()
+                    .map(|target| expand_portable_path(&target.path))
+            })
+            .unwrap_or_else(|| PathBuf::from(&artifact.path));
+        let deploy = resource
+            .map(|resource| resource.deploy.as_str())
+            .or_else(|| {
+                artifact
+                    .deployed_to
+                    .first()
+                    .map(|target| target.mode.as_str())
+            })
+            .unwrap_or("copy");
+
+        if !source_path.exists() {
+            items.push(EnvResourceActionItem {
+                id: artifact.id.clone(),
+                tool: tool_key.to_string(),
+                kind: artifact.kind.clone(),
+                source_path: source_path.to_string_lossy().to_string(),
+                target_path: target_path.to_string_lossy().to_string(),
+                deploy: deploy.to_string(),
+                status: "missing_source".to_string(),
+                backup_path: None,
+                error: Some("artifact source is missing from the AgentPort repo".to_string()),
+            });
+            continue;
+        }
+
+        match deploy_resource_path(
+            &artifact.id,
+            tool_key,
+            &artifact.kind,
+            &source_path,
+            &target_path,
+            deploy,
+            dry_run,
+        ) {
+            Ok(item) => items.push(item),
+            Err(err) => items.push(EnvResourceActionItem {
+                id: artifact.id.clone(),
+                tool: tool_key.to_string(),
+                kind: artifact.kind.clone(),
+                source_path: source_path.to_string_lossy().to_string(),
+                target_path: target_path.to_string_lossy().to_string(),
+                deploy: deploy.to_string(),
+                status: "error".to_string(),
+                backup_path: None,
+                error: Some(err.to_string()),
+            }),
+        }
+    }
+
+    Ok(EnvResourceActionReport {
+        ok: items.iter().all(|item| item.error.is_none()),
+        dry_run,
+        items,
+    })
+}
+
 fn build_tools(store: &SkillStore) -> BTreeMap<String, EnvTool> {
     tool_service::list_tool_info(store)
         .into_iter()
@@ -704,6 +924,19 @@ fn env_resources_for_tool(tool: &tool_service::ToolInfo) -> Vec<EnvToolResource>
             exists: resource.exists,
         })
         .collect()
+}
+
+fn current_resource_lookup(store: &SkillStore) -> BTreeMap<String, tool_service::ToolResourceInfo> {
+    let mut resources = BTreeMap::new();
+    for tool in tool_service::list_tool_info(store) {
+        for resource in tool.resources {
+            if resource.kind == "skill" {
+                continue;
+            }
+            resources.insert(resource_artifact_id(&tool.key, &resource), resource);
+        }
+    }
+    resources
 }
 
 fn build_packages(store: &SkillStore) -> Result<Vec<EnvPackage>> {
@@ -786,7 +1019,7 @@ fn resource_artifact_for_tool_resource(
         id: resource_artifact_id(tool_key, resource),
         kind: resource.kind.clone(),
         name: format!("{tool_key}:{}:{}", resource.scope, resource.kind),
-        path: portable_home_path(&resource.path),
+        path: resource_repository_relative_path(tool_key, resource),
         source: EnvArtifactSource {
             source_type: "tool_resource".to_string(),
             confidence: "exact".to_string(),
@@ -798,7 +1031,12 @@ fn resource_artifact_for_tool_resource(
             owner_type: "tool".to_string(),
             id: tool_key.to_string(),
         }),
-        deployed_to: Vec::new(),
+        deployed_to: vec![EnvDeployTarget {
+            tool: tool_key.to_string(),
+            path: portable_home_path(&resource.path),
+            mode: resource.deploy.clone(),
+            status: "active".to_string(),
+        }],
     })
 }
 
@@ -807,6 +1045,33 @@ fn resource_artifact_id(tool_key: &str, resource: &tool_service::ToolResourceInf
         "resource:{tool_key}:{}:{}:{}",
         resource.scope, resource.kind, resource.path_template
     )
+}
+
+fn resource_repository_relative_path(
+    tool_key: &str,
+    resource: &tool_service::ToolResourceInfo,
+) -> String {
+    let path = PathBuf::from("artifacts")
+        .join(tool_key)
+        .join(&resource.scope)
+        .join(&resource.kind)
+        .join(safe_relative_path(&resource.path_template));
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn resource_repository_path(tool_key: &str, resource: &tool_service::ToolResourceInfo) -> PathBuf {
+    central_repo::skills_dir().join(resource_repository_relative_path(tool_key, resource))
+}
+
+fn safe_relative_path(path: &str) -> PathBuf {
+    let trimmed = path.trim_start_matches('/').trim_start_matches("~/");
+    let mut out = PathBuf::new();
+    for component in Path::new(trimmed).components() {
+        if let std::path::Component::Normal(part) = component {
+            out.push(part);
+        }
+    }
+    out
 }
 
 fn build_skills(store: &SkillStore) -> Result<Vec<EnvSkill>> {
@@ -841,12 +1106,10 @@ fn env_source_for_skill(skill: &SkillRecord, local_source: bool) -> EnvSource {
     let local_linked = skill.source_type == "local_linked";
     EnvSource {
         source_type: skill.source_type.clone(),
-        mode: local_source.then(|| {
-            match skill.source_type.as_str() {
-                "local_created" => "created".to_string(),
-                "local_linked" => "linked".to_string(),
-                _ => "vendored".to_string(),
-            }
+        mode: local_source.then(|| match skill.source_type.as_str() {
+            "local_created" => "created".to_string(),
+            "local_linked" => "linked".to_string(),
+            _ => "vendored".to_string(),
         }),
         confidence: "exact".to_string(),
         reference: if local_linked {
@@ -873,6 +1136,28 @@ fn artifact_id_for_skill(skill: &SkillRecord) -> String {
 }
 
 fn artifact_content_hash(store: &SkillStore, artifact_id: &str) -> Result<Option<String>> {
+    if let Some(skill_id) = artifact_id.strip_prefix("skill:") {
+        return Ok(store
+            .get_skill_by_id(skill_id)?
+            .and_then(|skill| skill.content_hash));
+    }
+
+    for tool in tool_service::list_tool_info(store) {
+        for resource in &tool.resources {
+            if resource.kind == "skill" || resource_artifact_id(&tool.key, resource) != artifact_id
+            {
+                continue;
+            }
+            let path = resource_repository_path(&tool.key, resource);
+            if path.exists() {
+                return Ok(content_hash::hash_path(&path).ok());
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn current_artifact_content_hash(store: &SkillStore, artifact_id: &str) -> Result<Option<String>> {
     if let Some(skill_id) = artifact_id.strip_prefix("skill:") {
         return Ok(store
             .get_skill_by_id(skill_id)?
@@ -960,12 +1245,7 @@ fn package_source_for_skill(skill: &SkillRecord) -> EnvPackageSource {
 fn is_local_source_type(source_type: &str) -> bool {
     matches!(
         source_type,
-        "local"
-            | "import"
-            | "local_created"
-            | "local_linked"
-            | "local_vendored"
-            | "local_package"
+        "local" | "import" | "local_created" | "local_linked" | "local_vendored" | "local_package"
     )
 }
 
@@ -1065,6 +1345,491 @@ fn portable_home_path(path: &str) -> String {
         }
     }
     path.to_string()
+}
+
+fn expand_portable_path(path: &str) -> PathBuf {
+    if path == "~" {
+        return dirs::home_dir().unwrap_or_else(|| PathBuf::from(path));
+    }
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(path)
+}
+
+fn resolve_repo_relative_path(path: &str) -> PathBuf {
+    let candidate = expand_portable_path(path);
+    if candidate.is_absolute() {
+        candidate
+    } else {
+        central_repo::skills_dir().join(safe_relative_path(path))
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn export_resource_path(
+    id: &str,
+    tool: &str,
+    kind: &str,
+    source: &Path,
+    target: &Path,
+    deploy: &str,
+    overwrite: bool,
+    dry_run: bool,
+) -> Result<EnvResourceActionItem> {
+    let status = if target.exists() {
+        if paths_have_same_hash(source, target) {
+            "unchanged"
+        } else if overwrite {
+            if dry_run {
+                "would_update"
+            } else {
+                remove_path_if_exists(target)?;
+                copy_path(source, target)?;
+                "updated"
+            }
+        } else {
+            "skipped_existing"
+        }
+    } else if dry_run {
+        "would_create"
+    } else {
+        copy_path(source, target)?;
+        "created"
+    };
+
+    Ok(EnvResourceActionItem {
+        id: id.to_string(),
+        tool: tool.to_string(),
+        kind: kind.to_string(),
+        source_path: source.to_string_lossy().to_string(),
+        target_path: target.to_string_lossy().to_string(),
+        deploy: deploy.to_string(),
+        status: status.to_string(),
+        backup_path: None,
+        error: None,
+    })
+}
+
+fn deploy_resource_path(
+    id: &str,
+    tool: &str,
+    kind: &str,
+    source: &Path,
+    target: &Path,
+    deploy: &str,
+    dry_run: bool,
+) -> Result<EnvResourceActionItem> {
+    match deploy {
+        "merge_toml" => deploy_merge_toml(id, tool, kind, source, target, deploy, dry_run),
+        "merge_json" => deploy_merge_json(id, tool, kind, source, target, deploy, dry_run),
+        _ => deploy_copy(id, tool, kind, source, target, deploy, dry_run),
+    }
+}
+
+fn deploy_copy(
+    id: &str,
+    tool: &str,
+    kind: &str,
+    source: &Path,
+    target: &Path,
+    deploy: &str,
+    dry_run: bool,
+) -> Result<EnvResourceActionItem> {
+    let unchanged = target.exists() && paths_have_same_hash(source, target);
+    if unchanged {
+        return Ok(resource_action_item(
+            id,
+            tool,
+            kind,
+            source,
+            target,
+            deploy,
+            "unchanged",
+            None,
+            None,
+        ));
+    }
+
+    let status = if target.exists() {
+        if dry_run {
+            "would_update"
+        } else {
+            let backup = backup_existing_path(target)?;
+            remove_path_if_exists(target)?;
+            copy_path(source, target)?;
+            return Ok(resource_action_item(
+                id, tool, kind, source, target, deploy, "updated", backup, None,
+            ));
+        }
+    } else if dry_run {
+        "would_create"
+    } else {
+        copy_path(source, target)?;
+        "created"
+    };
+
+    Ok(resource_action_item(
+        id, tool, kind, source, target, deploy, status, None, None,
+    ))
+}
+
+fn deploy_merge_toml(
+    id: &str,
+    tool: &str,
+    kind: &str,
+    source: &Path,
+    target: &Path,
+    deploy: &str,
+    dry_run: bool,
+) -> Result<EnvResourceActionItem> {
+    let shared = fs::read_to_string(source)
+        .with_context(|| format!("failed to read {}", source.display()))?;
+    let current = fs::read_to_string(target).unwrap_or_default();
+    let merged = merge_toml_documents(&current, &shared)?;
+    deploy_generated_file(
+        id,
+        tool,
+        kind,
+        source,
+        target,
+        deploy,
+        merged.into_bytes(),
+        dry_run,
+    )
+}
+
+fn deploy_merge_json(
+    id: &str,
+    tool: &str,
+    kind: &str,
+    source: &Path,
+    target: &Path,
+    deploy: &str,
+    dry_run: bool,
+) -> Result<EnvResourceActionItem> {
+    if source.is_dir() {
+        let unchanged = target.exists() && paths_have_same_hash(source, target);
+        if unchanged {
+            return Ok(resource_action_item(
+                id,
+                tool,
+                kind,
+                source,
+                target,
+                deploy,
+                "unchanged",
+                None,
+                None,
+            ));
+        }
+        if dry_run {
+            return Ok(resource_action_item(
+                id,
+                tool,
+                kind,
+                source,
+                target,
+                deploy,
+                if target.exists() {
+                    "would_update"
+                } else {
+                    "would_create"
+                },
+                None,
+                None,
+            ));
+        }
+        let backup = if target.exists() {
+            backup_existing_path(target)?
+        } else {
+            None
+        };
+        merge_json_dir(source, target)?;
+        return Ok(resource_action_item(
+            id,
+            tool,
+            kind,
+            source,
+            target,
+            deploy,
+            if backup.is_some() {
+                "updated"
+            } else {
+                "created"
+            },
+            backup,
+            None,
+        ));
+    }
+
+    let shared = fs::read_to_string(source)
+        .with_context(|| format!("failed to read {}", source.display()))?;
+    let current = fs::read_to_string(target).unwrap_or_default();
+    let merged = merge_json_documents(&current, &shared)?;
+    deploy_generated_file(
+        id,
+        tool,
+        kind,
+        source,
+        target,
+        deploy,
+        merged.into_bytes(),
+        dry_run,
+    )
+}
+
+fn deploy_generated_file(
+    id: &str,
+    tool: &str,
+    kind: &str,
+    source: &Path,
+    target: &Path,
+    deploy: &str,
+    content: Vec<u8>,
+    dry_run: bool,
+) -> Result<EnvResourceActionItem> {
+    if target.exists() && fs::read(target).unwrap_or_default() == content {
+        return Ok(resource_action_item(
+            id,
+            tool,
+            kind,
+            source,
+            target,
+            deploy,
+            "unchanged",
+            None,
+            None,
+        ));
+    }
+
+    if dry_run {
+        return Ok(resource_action_item(
+            id,
+            tool,
+            kind,
+            source,
+            target,
+            deploy,
+            if target.exists() {
+                "would_update"
+            } else {
+                "would_create"
+            },
+            None,
+            None,
+        ));
+    }
+
+    let backup = if target.exists() {
+        backup_existing_path(target)?
+    } else {
+        None
+    };
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(target, content).with_context(|| format!("failed to write {}", target.display()))?;
+    Ok(resource_action_item(
+        id,
+        tool,
+        kind,
+        source,
+        target,
+        deploy,
+        if backup.is_some() {
+            "updated"
+        } else {
+            "created"
+        },
+        backup,
+        None,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resource_action_item(
+    id: &str,
+    tool: &str,
+    kind: &str,
+    source: &Path,
+    target: &Path,
+    deploy: &str,
+    status: &str,
+    backup_path: Option<PathBuf>,
+    error: Option<String>,
+) -> EnvResourceActionItem {
+    EnvResourceActionItem {
+        id: id.to_string(),
+        tool: tool.to_string(),
+        kind: kind.to_string(),
+        source_path: source.to_string_lossy().to_string(),
+        target_path: target.to_string_lossy().to_string(),
+        deploy: deploy.to_string(),
+        status: status.to_string(),
+        backup_path: backup_path.map(|path| path.to_string_lossy().to_string()),
+        error,
+    }
+}
+
+fn merge_toml_documents(current: &str, shared: &str) -> Result<String> {
+    let mut base = if current.trim().is_empty() {
+        toml::Value::Table(Default::default())
+    } else {
+        toml::from_str(current).context("failed to parse existing TOML")?
+    };
+    let overlay: toml::Value = toml::from_str(shared).context("failed to parse shared TOML")?;
+    merge_toml_values(&mut base, overlay);
+    let mut rendered = toml::to_string_pretty(&base)?;
+    if !rendered.ends_with('\n') {
+        rendered.push('\n');
+    }
+    Ok(rendered)
+}
+
+fn merge_toml_values(base: &mut toml::Value, overlay: toml::Value) {
+    match (base, overlay) {
+        (toml::Value::Table(base_table), toml::Value::Table(overlay_table)) => {
+            for (key, value) in overlay_table {
+                if let Some(existing) = base_table.get_mut(&key) {
+                    merge_toml_values(existing, value);
+                } else {
+                    base_table.insert(key, value);
+                }
+            }
+        }
+        (base_value, overlay_value) => *base_value = overlay_value,
+    }
+}
+
+fn merge_json_documents(current: &str, shared: &str) -> Result<String> {
+    let mut base = if current.trim().is_empty() {
+        serde_json::Value::Object(Default::default())
+    } else {
+        serde_json::from_str(current).context("failed to parse existing JSON")?
+    };
+    let overlay: serde_json::Value =
+        serde_json::from_str(shared).context("failed to parse shared JSON")?;
+    merge_json_values(&mut base, overlay);
+    let mut rendered = serde_json::to_string_pretty(&base)?;
+    rendered.push('\n');
+    Ok(rendered)
+}
+
+fn merge_json_values(base: &mut serde_json::Value, overlay: serde_json::Value) {
+    match (base, overlay) {
+        (serde_json::Value::Object(base_map), serde_json::Value::Object(overlay_map)) => {
+            for (key, value) in overlay_map {
+                if let Some(existing) = base_map.get_mut(&key) {
+                    merge_json_values(existing, value);
+                } else {
+                    base_map.insert(key, value);
+                }
+            }
+        }
+        (base_value, overlay_value) => *base_value = overlay_value,
+    }
+}
+
+fn merge_json_dir(source: &Path, target: &Path) -> Result<()> {
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            merge_json_dir(&source_path, &target_path)?;
+        } else if source_path.extension().is_some_and(|ext| ext == "json") {
+            let shared = fs::read_to_string(&source_path)?;
+            let current = fs::read_to_string(&target_path).unwrap_or_default();
+            let merged = merge_json_documents(&current, &shared)?;
+            if let Some(parent) = target_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(target_path, merged)?;
+        } else {
+            copy_path(&source_path, &target_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn backup_existing_path(path: &Path) -> Result<Option<PathBuf>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    fs::create_dir_all(machine_backups_dir())?;
+    let file_name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "resource".to_string());
+    let backup_name = format!(
+        "{}-{}",
+        Utc::now().format("%Y%m%d-%H%M%S%.3f"),
+        file_name.replace('/', "_")
+    );
+    let backup_path = machine_backups_dir().join(backup_name);
+    copy_path(path, &backup_path)?;
+    Ok(Some(backup_path))
+}
+
+fn paths_have_same_hash(left: &Path, right: &Path) -> bool {
+    if !left.exists() || !right.exists() {
+        return false;
+    }
+    match (
+        content_hash::hash_path(left),
+        content_hash::hash_path(right),
+    ) {
+        (Ok(left_hash), Ok(right_hash)) => left_hash == right_hash,
+        _ => false,
+    }
+}
+
+fn copy_path(source: &Path, target: &Path) -> Result<()> {
+    if source.is_dir() {
+        copy_dir_recursive(source, target)
+    } else {
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(source, target).with_context(|| {
+            format!(
+                "failed to copy {} to {}",
+                source.display(),
+                target.display()
+            )
+        })?;
+        Ok(())
+    }
+}
+
+fn copy_dir_recursive(source: &Path, target: &Path) -> Result<()> {
+    fs::create_dir_all(target)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_recursive(&source_path, &target_path)?;
+        } else {
+            copy_path(&source_path, &target_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn remove_path_if_exists(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    if path.is_dir() {
+        fs::remove_dir_all(path)?;
+    } else {
+        fs::remove_file(path)?;
+    }
+    Ok(())
 }
 
 fn write_yaml<T: Serialize>(path: &PathBuf, value: &T) -> Result<()> {
@@ -1349,11 +2114,103 @@ mod tests {
             "resource:codex:global:config:.codex/config.toml"
         );
         assert_eq!(artifact.kind, "config");
-        assert_eq!(artifact.path, "~/.codex/config.toml");
+        assert_eq!(
+            artifact.path,
+            "artifacts/codex/global/config/.codex/config.toml"
+        );
         assert_eq!(artifact.source.source_type, "tool_resource");
         assert_eq!(artifact.source.path.as_deref(), Some(".codex/config.toml"));
         assert_eq!(artifact.owner.as_ref().unwrap().owner_type, "tool");
         assert_eq!(artifact.owner.as_ref().unwrap().id, "codex");
+        assert_eq!(artifact.deployed_to.len(), 1);
+        assert_eq!(artifact.deployed_to[0].path, "~/.codex/config.toml");
+        assert_eq!(artifact.deployed_to[0].mode, "merge_toml");
+    }
+
+    #[test]
+    fn machine_local_overlay_records_linked_origin_paths() {
+        let _guard = central_repo::test_base_dir_lock();
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().join("repo");
+        central_repo::set_test_base_dir_override(Some(base.clone()));
+        std::fs::create_dir_all(central_repo::skills_dir()).unwrap();
+        let linked_path = tmp.path().join("dev").join("review");
+        std::fs::create_dir_all(&linked_path).unwrap();
+
+        record_linked_origin_path("personal/review", &linked_path).unwrap();
+
+        let overlay = read_machine_local_overlay().unwrap();
+        assert_eq!(
+            overlay.origins["personal/review"].path,
+            linked_path.to_string_lossy()
+        );
+        assert_eq!(
+            linked_origin_path("personal/review").unwrap().as_deref(),
+            Some(linked_path.as_path())
+        );
+
+        central_repo::set_test_base_dir_override(None);
+    }
+
+    #[test]
+    fn merge_toml_documents_preserves_local_keys_and_applies_shared_keys() {
+        let current = r#"
+model = "gpt-5"
+approval_policy = "on-request"
+
+[profiles.personal]
+temperature = 0.2
+machine_only = true
+"#;
+        let shared = r#"
+model = "gpt-5.1"
+
+[profiles.personal]
+temperature = 0.1
+"#;
+
+        let merged = merge_toml_documents(current, shared).unwrap();
+
+        assert!(merged.contains("model = \"gpt-5.1\""));
+        assert!(merged.contains("approval_policy = \"on-request\""));
+        assert!(merged.contains("temperature = 0.1"));
+        assert!(merged.contains("machine_only = true"));
+    }
+
+    #[test]
+    fn deploy_merge_toml_backs_up_current_file() {
+        let _guard = central_repo::test_base_dir_lock();
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().join("repo");
+        central_repo::set_test_base_dir_override(Some(base.clone()));
+        std::fs::create_dir_all(central_repo::skills_dir()).unwrap();
+        let source = tmp.path().join("source.toml");
+        let target = tmp.path().join("target.toml");
+        std::fs::write(&source, "model = \"gpt-5.1\"\n").unwrap();
+        std::fs::write(
+            &target,
+            "model = \"gpt-5\"\napproval_policy = \"on-request\"\n",
+        )
+        .unwrap();
+
+        let item = deploy_resource_path(
+            "resource:codex:global:config:.codex/config.toml",
+            "codex",
+            "config",
+            &source,
+            &target,
+            "merge_toml",
+            false,
+        )
+        .unwrap();
+
+        let written = std::fs::read_to_string(&target).unwrap();
+        assert_eq!(item.status, "updated");
+        assert!(item.backup_path.is_some());
+        assert!(written.contains("model = \"gpt-5.1\""));
+        assert!(written.contains("approval_policy = \"on-request\""));
+
+        central_repo::set_test_base_dir_override(None);
     }
 
     #[test]
@@ -1373,6 +2230,23 @@ mod tests {
         assert!(gitignore.contains("/machine/secrets.local.yaml"));
         assert!(gitignore.contains("/machine/backups/"));
         assert!(machine_dir().is_dir());
+
+        central_repo::set_test_base_dir_override(None);
+    }
+
+    #[test]
+    fn resource_export_dry_run_does_not_create_machine_overlay() {
+        let _guard = central_repo::test_base_dir_lock();
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().join("repo");
+        central_repo::set_test_base_dir_override(Some(base.clone()));
+        std::fs::create_dir_all(central_repo::skills_dir()).unwrap();
+        let store = SkillStore::new(&base.join("test.db")).unwrap();
+
+        export_resource_artifacts(&store, false, true).unwrap();
+
+        assert!(!machine_dir().exists());
+        assert!(!central_repo::skills_dir().join(".gitignore").exists());
 
         central_repo::set_test_base_dir_override(None);
     }

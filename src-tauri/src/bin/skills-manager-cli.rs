@@ -133,6 +133,13 @@ enum EnvCommand {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Export current machine agent resources into the AgentPort repo.
+    ExportResources {
+        #[arg(long)]
+        overwrite: bool,
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Adopt existing skills from installed agent skill directories.
     Adopt {
         #[arg(long)]
@@ -605,6 +612,7 @@ struct EnvApplyReport {
     dry_run: bool,
     missing_skills: Vec<String>,
     targets: Vec<scenario_service::SyncPreviewTarget>,
+    resources: Vec<agentport_env::EnvResourceActionItem>,
     applied: bool,
 }
 
@@ -847,6 +855,13 @@ fn run_env(args: EnvArgs, store: &SkillStore, json: bool) -> anyhow::Result<()> 
             let report = run_env_apply(store, profile.as_deref(), dry_run)?;
             print_json(&report, json);
         }
+        EnvCommand::ExportResources { overwrite, dry_run } => {
+            let report = agentport_env::export_resource_artifacts(store, overwrite, dry_run)?;
+            if !dry_run && report.ok {
+                agentport_env::write_current_environment(store, true)?;
+            }
+            print_json(&report, json);
+        }
         EnvCommand::Adopt {
             profile,
             paths,
@@ -885,6 +900,7 @@ fn run_env_apply(
         resolve_scenario(store, &profile.id).or_else(|_| resolve_scenario(store, &profile.name))?;
     let targets =
         scenario_service::preview_scenario_sync(store, &preset.id).map_err(map_app_err)?;
+    let planned_resources = agentport_env::apply_resource_artifacts(store, &manifest, true)?;
 
     if !diff.missing_skills.is_empty() {
         return Ok(EnvApplyReport {
@@ -894,21 +910,26 @@ fn run_env_apply(
             dry_run,
             missing_skills: diff.missing_skills,
             targets,
+            resources: planned_resources.items,
             applied: false,
         });
     }
 
-    if !dry_run {
+    let resources = if dry_run {
+        planned_resources
+    } else {
         scenario_service::apply_scenario_to_default(store, &preset.id).map_err(map_app_err)?;
-    }
+        agentport_env::apply_resource_artifacts(store, &manifest, false)?
+    };
 
     Ok(EnvApplyReport {
-        ok: true,
+        ok: resources.ok,
         profile_id: profile.id.clone(),
         profile_name: profile.name.clone(),
         dry_run,
         missing_skills: Vec::new(),
         targets,
+        resources: resources.items,
         applied: !dry_run,
     })
 }
@@ -1762,16 +1783,20 @@ fn run_link_skill(
     let path = validate_local_skill_path(path)?;
     let origin_id = validate_origin_id(origin)?;
     let resolved = path.canonicalize().unwrap_or_else(|_| path.clone());
-    run_local_skill_install(
+    let report = run_local_skill_install(
         store,
         &path,
         name,
         "local_linked",
         "linked",
-        Some(origin_id),
+        Some(origin_id.clone()),
         Some(resolved.to_string_lossy().to_string()),
         dry_run,
-    )
+    )?;
+    if !dry_run {
+        agentport_env::record_linked_origin_path(&origin_id, &resolved)?;
+    }
+    Ok(report)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2048,7 +2073,16 @@ fn is_watchable_local_source(source_type: &str) -> bool {
 
 fn local_watch_source_path(skill: &app_lib::core::skill_store::SkillRecord) -> Option<PathBuf> {
     match skill.source_type.as_str() {
-        "local_linked" => skill.source_ref_resolved.as_ref().map(PathBuf::from),
+        "local_linked" => skill
+            .source_ref_resolved
+            .as_ref()
+            .map(PathBuf::from)
+            .or_else(|| {
+                skill
+                    .source_ref
+                    .as_deref()
+                    .and_then(|origin| agentport_env::linked_origin_path(origin).ok().flatten())
+            }),
         _ => skill.source_ref.as_ref().map(PathBuf::from),
     }
 }
