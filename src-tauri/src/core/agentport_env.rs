@@ -259,6 +259,14 @@ pub struct EnvDoctorReport {
     pub warnings: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct EnvBootstrapSkillReport {
+    pub destination: String,
+    pub skill_file: String,
+    pub profile: Option<String>,
+    pub overwritten: bool,
+}
+
 pub fn manifest_path() -> PathBuf {
     central_repo::skills_dir().join(MANIFEST_FILE)
 }
@@ -500,6 +508,30 @@ pub fn packages_from_manifest_or_store(store: &SkillStore) -> Result<Vec<EnvPack
         return Ok(read_manifest()?.packages);
     }
     build_packages(store)
+}
+
+pub fn export_bootstrap_skill(
+    profile: Option<&str>,
+    destination: PathBuf,
+    overwrite: bool,
+) -> Result<EnvBootstrapSkillReport> {
+    let skill_file = destination.join("SKILL.md");
+    if skill_file.exists() && !overwrite {
+        bail!(
+            "{} already exists; pass --overwrite to replace it",
+            skill_file.display()
+        );
+    }
+    fs::create_dir_all(&destination)?;
+    fs::write(&skill_file, bootstrap_skill_markdown(profile))
+        .with_context(|| format!("failed to write {}", skill_file.display()))?;
+
+    Ok(EnvBootstrapSkillReport {
+        destination: destination.to_string_lossy().to_string(),
+        skill_file: skill_file.to_string_lossy().to_string(),
+        profile: profile.map(ToOwned::to_owned),
+        overwritten: overwrite,
+    })
 }
 
 fn build_tools(store: &SkillStore) -> BTreeMap<String, EnvTool> {
@@ -789,6 +821,39 @@ fn write_yaml<T: Serialize>(path: &PathBuf, value: &T) -> Result<()> {
     fs::write(path, yaml).with_context(|| format!("failed to write {}", path.display()))
 }
 
+fn bootstrap_skill_markdown(profile: Option<&str>) -> String {
+    let profile_arg = profile.unwrap_or("default");
+    format!(
+        r#"---
+name: agentport-bootstrap
+description: Bootstrap an AgentPort-managed AI coding agent environment on a new machine. Use this when the user wants to restore, verify, or apply their shared agent environment from agentport.yaml.
+---
+
+# AgentPort Bootstrap
+
+Use this skill to restore a user's AgentPort environment on a new machine or in a new coding agent.
+
+## Procedure
+
+1. Check whether `agentport` is available. If it is not available, check whether `skills-manager-cli` is available.
+2. If neither command exists, ask the user to install or build the AgentPort CLI before continuing.
+3. Run `agentport env doctor` if `agentport` exists, otherwise run `skills-manager-cli env doctor`.
+4. If the environment repo is missing, ask the user for its Git remote and clone or configure it using the CLI's git commands.
+5. Run `agentport env diff {profile_arg}` if `agentport` exists, otherwise run `skills-manager-cli env diff {profile_arg}`.
+6. Show the user the planned changes and ask for confirmation before applying them.
+7. After confirmation, run `agentport env apply {profile_arg}` or `skills-manager-cli env apply {profile_arg}`.
+8. Finish by running `agentport env doctor` or `skills-manager-cli env doctor` and report any warnings.
+
+## Safety
+
+- Do not edit secrets or API keys into `agentport.yaml`.
+- Do not run package install scripts unless the user confirms the plan.
+- Do not overwrite local customized skills unless the CLI reports it is safe.
+- Prefer `--dry-run` before commands that modify files.
+"#
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -881,5 +946,15 @@ mod tests {
             portable_home_path(&input.to_string_lossy()),
             "~/.codex/skills"
         );
+    }
+
+    #[test]
+    fn bootstrap_skill_mentions_profile_and_confirmation() {
+        let markdown = bootstrap_skill_markdown(Some("personal-default"));
+
+        assert!(markdown.contains("agentport-bootstrap"));
+        assert!(markdown.contains("env diff personal-default"));
+        assert!(markdown.contains("ask for confirmation"));
+        assert!(markdown.contains("Do not edit secrets"));
     }
 }

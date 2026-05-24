@@ -102,6 +102,15 @@ enum EnvCommand {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Export an agent-readable bootstrap SKILL.md for restoring this environment.
+    ExportBootstrapSkill {
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        dest: PathBuf,
+        #[arg(long)]
+        overwrite: bool,
+    },
     /// Check whether the AgentPort environment metadata is usable.
     Doctor,
 }
@@ -641,6 +650,15 @@ fn run_env(args: EnvArgs, store: &SkillStore, json: bool) -> anyhow::Result<()> 
         }
         EnvCommand::Apply { profile, dry_run } => {
             let report = run_env_apply(store, profile.as_deref(), dry_run)?;
+            print_json(&report, json);
+        }
+        EnvCommand::ExportBootstrapSkill {
+            profile,
+            dest,
+            overwrite,
+        } => {
+            let report =
+                agentport_env::export_bootstrap_skill(profile.as_deref(), dest, overwrite)?;
             print_json(&report, json);
         }
         EnvCommand::Doctor => {
