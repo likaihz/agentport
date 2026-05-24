@@ -90,7 +90,7 @@ where
     f()
 }
 
-pub(crate) fn write_all_from_db_unlocked(store: &SkillStore) -> Result<()> {
+pub fn write_all_from_db_unlocked(store: &SkillStore) -> Result<()> {
     ensure_metadata_dirs()?;
     write_schema()?;
     write_skill_records_from_db(store)?;

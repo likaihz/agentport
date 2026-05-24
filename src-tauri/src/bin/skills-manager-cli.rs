@@ -80,6 +80,26 @@ enum PackageCommand {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Update every managed skill owned by a package.
+    Update {
+        package: String,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Remove every managed skill owned by a package.
+    Remove {
+        package: String,
+        #[arg(long, short)]
+        yes: bool,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Detach one package-owned skill and keep it as a local vendored skill.
+    Detach {
+        reference: String,
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Args, Debug)]
@@ -443,6 +463,44 @@ struct PackageInstallReport {
 }
 
 #[derive(Debug, Serialize)]
+struct PackageUpdateReport {
+    ok: bool,
+    package_id: String,
+    dry_run: bool,
+    updated: Vec<PackageSkillUpdateReport>,
+    skipped: Vec<PackageSkillUpdateReport>,
+}
+
+#[derive(Debug, Serialize)]
+struct PackageSkillUpdateReport {
+    skill_id: String,
+    name: String,
+    source_type: String,
+    refreshed: bool,
+    error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct PackageRemoveReport {
+    ok: bool,
+    package_id: String,
+    dry_run: bool,
+    deleted: usize,
+    skills: Vec<String>,
+    failed: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct PackageDetachReport {
+    ok: bool,
+    dry_run: bool,
+    skill_id: String,
+    name: String,
+    previous_package_id: Option<String>,
+    source_type: String,
+}
+
+#[derive(Debug, Serialize)]
 struct PackageSkillCandidate {
     name: String,
     path: String,
@@ -657,6 +715,22 @@ fn run_packages(args: PackageArgs, store: &SkillStore, json: bool) -> anyhow::Re
             let report = run_package_install(store, &reference, local, git, dry_run)?;
             print_json(&report, json);
         }
+        PackageCommand::Update { package, dry_run } => {
+            let report = run_package_update(store, &package, dry_run)?;
+            print_json(&report, json);
+        }
+        PackageCommand::Remove {
+            package,
+            yes,
+            dry_run,
+        } => {
+            let report = run_package_remove(store, &package, yes, dry_run)?;
+            print_json(&report, json);
+        }
+        PackageCommand::Detach { reference, dry_run } => {
+            let report = run_package_detach(store, &reference, dry_run)?;
+            print_json(&report, json);
+        }
     }
     Ok(())
 }
@@ -755,10 +829,232 @@ fn run_package_install(
     dry_run: bool,
 ) -> anyhow::Result<PackageInstallReport> {
     let package_kind = classify_package_ref(reference, force_local, force_git)?;
-    match package_kind {
+    let report = match package_kind {
         PackageInstallKind::Local => install_local_package(store, reference, dry_run),
         PackageInstallKind::Git => install_git_package(store, reference, dry_run),
+    }?;
+    if !dry_run {
+        refresh_agentport_environment_if_present(store)?;
     }
+    Ok(report)
+}
+
+fn run_package_update(
+    store: &SkillStore,
+    package_ref: &str,
+    dry_run: bool,
+) -> anyhow::Result<PackageUpdateReport> {
+    let package_id = resolve_package_id(store, package_ref)?;
+    let skills = skills_for_package(store, &package_id)?;
+    if skills.is_empty() {
+        bail!("package has no managed skills: {package_id}");
+    }
+
+    let mut updated = Vec::new();
+    let mut skipped = Vec::new();
+    let proxy_url = store.proxy_url();
+
+    for skill in skills {
+        if dry_run {
+            skipped.push(PackageSkillUpdateReport {
+                skill_id: skill.id,
+                name: skill.name,
+                source_type: skill.source_type,
+                refreshed: false,
+                error: Some("dry-run".to_string()),
+            });
+            continue;
+        }
+
+        let report = match skill.source_type.as_str() {
+            "git" | "skillssh" => {
+                match cmd::update_git_skill_internal(store, &skill.id, proxy_url.as_deref(), None) {
+                    Ok(result) => PackageSkillUpdateReport {
+                        skill_id: skill.id,
+                        name: skill.name,
+                        source_type: skill.source_type,
+                        refreshed: result.content_changed,
+                        error: None,
+                    },
+                    Err(err) => PackageSkillUpdateReport {
+                        skill_id: skill.id,
+                        name: skill.name,
+                        source_type: skill.source_type,
+                        refreshed: false,
+                        error: Some(err.message),
+                    },
+                }
+            }
+            "local_package" => match reimport_local_package_skill(store, &skill) {
+                Ok(refreshed) => PackageSkillUpdateReport {
+                    skill_id: skill.id,
+                    name: skill.name,
+                    source_type: skill.source_type,
+                    refreshed,
+                    error: None,
+                },
+                Err(err) => PackageSkillUpdateReport {
+                    skill_id: skill.id,
+                    name: skill.name,
+                    source_type: skill.source_type,
+                    refreshed: false,
+                    error: Some(err.to_string()),
+                },
+            },
+            other => PackageSkillUpdateReport {
+                skill_id: skill.id,
+                name: skill.name,
+                source_type: other.to_string(),
+                refreshed: false,
+                error: Some("unsupported package skill source".to_string()),
+            },
+        };
+        updated.push(report);
+    }
+    if !dry_run {
+        refresh_agentport_environment_if_present(store)?;
+    }
+
+    Ok(PackageUpdateReport {
+        ok: updated.iter().all(|item| item.error.is_none()),
+        package_id,
+        dry_run,
+        updated,
+        skipped,
+    })
+}
+
+fn run_package_remove(
+    store: &SkillStore,
+    package_ref: &str,
+    yes: bool,
+    dry_run: bool,
+) -> anyhow::Result<PackageRemoveReport> {
+    let package_id = resolve_package_id(store, package_ref)?;
+    let skills = skills_for_package(store, &package_id)?;
+    let skill_ids: Vec<String> = skills.iter().map(|skill| skill.id.clone()).collect();
+    let skill_names: Vec<String> = skills.iter().map(|skill| skill.name.clone()).collect();
+
+    if dry_run {
+        return Ok(PackageRemoveReport {
+            ok: true,
+            package_id,
+            dry_run,
+            deleted: skill_ids.len(),
+            skills: skill_names,
+            failed: Vec::new(),
+        });
+    }
+    if !yes {
+        bail!(
+            "refusing to delete {} package skill(s) without --yes",
+            skill_ids.len()
+        );
+    }
+
+    let result = cmd::delete_managed_skills_by_ids(store, &skill_ids).map_err(map_app_err)?;
+    refresh_agentport_environment_if_present(store)?;
+    Ok(PackageRemoveReport {
+        ok: result.failed.is_empty(),
+        package_id,
+        dry_run,
+        deleted: result.deleted,
+        skills: skill_names,
+        failed: result.failed,
+    })
+}
+
+fn run_package_detach(
+    store: &SkillStore,
+    reference: &str,
+    dry_run: bool,
+) -> anyhow::Result<PackageDetachReport> {
+    let skill = resolve_artifact_or_skill(store, reference)?;
+    let package_id = agentport_env::package_id_for_skill_record(&skill);
+    if package_id.is_none() {
+        bail!("skill is not owned by a package: {}", skill.name);
+    }
+
+    if !dry_run {
+        store.update_skill_after_reinstall(
+            &skill.id,
+            &skill.name,
+            skill.description.as_deref(),
+            "local_vendored",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            skill.content_hash.as_deref(),
+            "local_only",
+        )?;
+        sync_metadata::write_all_from_db(store)?;
+        refresh_agentport_environment_if_present(store)?;
+    }
+
+    Ok(PackageDetachReport {
+        ok: true,
+        dry_run,
+        skill_id: skill.id,
+        name: skill.name,
+        previous_package_id: package_id,
+        source_type: if dry_run {
+            skill.source_type
+        } else {
+            "local_vendored".to_string()
+        },
+    })
+}
+
+fn reimport_local_package_skill(
+    store: &SkillStore,
+    skill: &app_lib::core::skill_store::SkillRecord,
+) -> anyhow::Result<bool> {
+    let source_root = skill
+        .source_ref
+        .as_ref()
+        .ok_or_else(|| anyhow!("local package skill is missing source_ref"))?;
+    let source_subpath = skill
+        .source_subpath
+        .as_ref()
+        .ok_or_else(|| anyhow!("local package skill is missing source_subpath"))?;
+    let source_path = PathBuf::from(source_root).join(source_subpath);
+    if !source_path.exists() {
+        bail!("local package skill source is missing: {}", source_path.display());
+    }
+
+    let _lock = RepoLock::acquire("cli update local package skill")?;
+    let staged_path = cmd::staged_path_for(&skill.central_path);
+    let install_result =
+        installer::install_from_local_to_destination(&source_path, Some(&skill.name), &staged_path)?;
+    let content_changed = skill.content_hash.as_deref() != Some(install_result.content_hash.as_str());
+    cmd::swap_skill_directory(&staged_path, Path::new(&skill.central_path)).map_err(map_app_err)?;
+    store.update_skill_after_reinstall(
+        &skill.id,
+        &skill.name,
+        install_result.description.as_deref(),
+        &skill.source_type,
+        skill.source_ref.as_deref(),
+        skill.source_ref_resolved.as_deref(),
+        skill.source_subpath.as_deref(),
+        skill.source_branch.as_deref(),
+        skill.source_revision.as_deref(),
+        skill.remote_revision.as_deref(),
+        Some(&install_result.content_hash),
+        &skill.update_status,
+    )?;
+    cmd::resync_copy_targets(store, &skill.id).map_err(map_app_err)?;
+    sync_metadata::write_all_from_db_unlocked(store)?;
+    Ok(content_changed)
+}
+
+fn refresh_agentport_environment_if_present(store: &SkillStore) -> anyhow::Result<()> {
+    if agentport_env::manifest_path().exists() || agentport_env::lock_path().exists() {
+        agentport_env::write_current_environment(store, true)?;
+    }
+    Ok(())
 }
 
 fn install_local_package(
@@ -945,6 +1241,51 @@ fn classify_package_ref(
 enum PackageInstallKind {
     Local,
     Git,
+}
+
+fn resolve_package_id(store: &SkillStore, reference: &str) -> anyhow::Result<String> {
+    let packages = agentport_env::packages_from_manifest_or_store(store)?;
+    let matches: Vec<String> = packages
+        .into_iter()
+        .filter(|package| {
+            package.id == reference
+                || package.id.strip_prefix("git:") == Some(reference)
+                || package.id.strip_prefix("local:") == Some(reference)
+                || package.id.strip_prefix("skillssh:") == Some(reference)
+        })
+        .map(|package| package.id)
+        .collect();
+
+    match matches.len() {
+        1 => Ok(matches.into_iter().next().unwrap()),
+        0 => Err(anyhow!("package not found: {reference}")),
+        _ => Err(anyhow!("package reference is ambiguous: {reference}")),
+    }
+}
+
+fn skills_for_package(
+    store: &SkillStore,
+    package_id: &str,
+) -> anyhow::Result<Vec<app_lib::core::skill_store::SkillRecord>> {
+    Ok(store
+        .get_all_skills()?
+        .into_iter()
+        .filter(|skill| {
+            agentport_env::package_id_for_skill_record(skill).as_deref() == Some(package_id)
+        })
+        .collect())
+}
+
+fn resolve_artifact_or_skill(
+    store: &SkillStore,
+    reference: &str,
+) -> anyhow::Result<app_lib::core::skill_store::SkillRecord> {
+    if let Some(skill_id) = reference.strip_prefix("skill:") {
+        return store
+            .get_skill_by_id(skill_id)?
+            .ok_or_else(|| anyhow!("skill not found: {reference}"));
+    }
+    resolve_skill(store, reference)
 }
 
 // ── skills ────────────────────────────────────────────────────────────────

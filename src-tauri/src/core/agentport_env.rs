@@ -632,7 +632,7 @@ fn build_tools(store: &SkillStore) -> BTreeMap<String, EnvTool> {
 fn build_packages(store: &SkillStore) -> Result<Vec<EnvPackage>> {
     let mut packages = BTreeMap::<String, EnvPackage>::new();
     for skill in store.get_all_skills()? {
-        let Some(package_id) = package_id_for_skill(&skill) else {
+        let Some(package_id) = package_id_for_skill_record(&skill) else {
             continue;
         };
         let artifact_id = artifact_id_for_skill(&skill);
@@ -656,7 +656,7 @@ fn build_packages(store: &SkillStore) -> Result<Vec<EnvPackage>> {
 fn build_artifacts(store: &SkillStore) -> Result<Vec<EnvArtifact>> {
     let mut artifacts = Vec::new();
     for skill in store.get_all_skills()? {
-        let package_id = package_id_for_skill(&skill);
+        let package_id = package_id_for_skill_record(&skill);
         let deployed_to = store
             .get_targets_for_skill(&skill.id)?
             .into_iter()
@@ -783,7 +783,7 @@ fn artifact_source_for_skill(skill: &SkillRecord, package_id: Option<&str>) -> E
     }
 }
 
-fn package_id_for_skill(skill: &SkillRecord) -> Option<String> {
+pub fn package_id_for_skill_record(skill: &SkillRecord) -> Option<String> {
     match skill.source_type.as_str() {
         "git" => source_identity(skill).map(|identity| format!("git:{identity}")),
         "skillssh" => source_identity(skill).map(|identity| format!("skillssh:{identity}")),
@@ -820,7 +820,7 @@ fn package_source_for_skill(skill: &SkillRecord) -> EnvPackageSource {
 fn is_local_source_type(source_type: &str) -> bool {
     matches!(
         source_type,
-        "local" | "import" | "local_created" | "local_package"
+        "local" | "import" | "local_created" | "local_vendored" | "local_package"
     )
 }
 
@@ -1009,7 +1009,7 @@ mod tests {
     #[test]
     fn git_skill_becomes_package_owned_artifact() {
         let skill = skill("git");
-        let package_id = package_id_for_skill(&skill).unwrap();
+        let package_id = package_id_for_skill_record(&skill).unwrap();
         let artifact_source = artifact_source_for_skill(&skill, Some(&package_id));
 
         assert_eq!(package_id, "git:https://github.com/acme/skills");
@@ -1027,7 +1027,7 @@ mod tests {
     fn local_skill_has_no_package_owner() {
         let skill = skill("local");
 
-        assert!(package_id_for_skill(&skill).is_none());
+        assert!(package_id_for_skill_record(&skill).is_none());
         let artifact_source = artifact_source_for_skill(&skill, None);
         assert_eq!(artifact_source.source_type, "local_vendored");
         assert!(artifact_source.package.is_none());
@@ -1041,7 +1041,7 @@ mod tests {
 
         assert_eq!(source.mode.as_deref(), Some("created"));
         assert_eq!(artifact_source.source_type, "local_created");
-        assert!(package_id_for_skill(&skill).is_none());
+        assert!(package_id_for_skill_record(&skill).is_none());
     }
 
     #[test]
