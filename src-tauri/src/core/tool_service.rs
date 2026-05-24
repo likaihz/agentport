@@ -18,6 +18,18 @@ pub struct ToolInfo {
     pub has_path_override: bool,
     pub project_relative_skills_dir: Option<String>,
     pub category: ToolCategory,
+    pub resources: Vec<ToolResourceInfo>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ToolResourceInfo {
+    pub kind: String,
+    pub scope: String,
+    pub path: String,
+    pub path_template: String,
+    pub deploy: String,
+    pub scan: String,
+    pub exists: bool,
 }
 
 pub fn get_disabled_tools(store: &SkillStore) -> Vec<String> {
@@ -179,23 +191,42 @@ pub fn list_tool_info(store: &SkillStore) -> Vec<ToolInfo> {
     let disabled = disabled_tools_set(store);
     let infos: Vec<ToolInfo> = tool_adapters::all_tool_adapters(store)
         .into_iter()
-        .map(|adapter| ToolInfo {
-            key: adapter.key.clone(),
-            display_name: adapter.display_name.clone(),
-            installed: adapter.is_installed(),
-            skills_dir: adapter.skills_dir().to_string_lossy().to_string(),
-            enabled: !disabled.contains(&adapter.key),
-            is_custom: adapter.is_custom,
-            has_path_override: adapter.has_path_override(),
-            project_relative_skills_dir: {
-                let project_dir = adapter.project_relative_skills_dir();
-                if project_dir.is_empty() {
-                    None
-                } else {
-                    Some(project_dir.to_string())
-                }
-            },
-            category: adapter.category,
+        .map(|adapter| {
+            let resources = adapter
+                .resource_roots()
+                .into_iter()
+                .map(|resource| {
+                    let path = adapter.resource_path(&resource);
+                    ToolResourceInfo {
+                        kind: resource.kind,
+                        scope: resource.scope,
+                        path: path.to_string_lossy().to_string(),
+                        path_template: resource.path_template,
+                        deploy: resource.deploy,
+                        scan: resource.scan,
+                        exists: path.exists(),
+                    }
+                })
+                .collect();
+            ToolInfo {
+                key: adapter.key.clone(),
+                display_name: adapter.display_name.clone(),
+                installed: adapter.is_installed(),
+                skills_dir: adapter.skills_dir().to_string_lossy().to_string(),
+                enabled: !disabled.contains(&adapter.key),
+                is_custom: adapter.is_custom,
+                has_path_override: adapter.has_path_override(),
+                project_relative_skills_dir: {
+                    let project_dir = adapter.project_relative_skills_dir();
+                    if project_dir.is_empty() {
+                        None
+                    } else {
+                        Some(project_dir.to_string())
+                    }
+                },
+                category: adapter.category,
+                resources,
+            }
         })
         .collect();
 

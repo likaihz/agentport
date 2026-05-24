@@ -46,6 +46,15 @@ pub struct ToolAdapter {
     pub category: ToolCategory,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResourceRoot {
+    pub kind: String,
+    pub scope: String,
+    pub path_template: String,
+    pub deploy: String,
+    pub scan: String,
+}
+
 /// Serializable custom tool definition stored in settings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomToolDef {
@@ -141,6 +150,70 @@ impl ToolAdapter {
     /// Whether this adapter's skills_dir has been overridden from the default.
     pub fn has_path_override(&self) -> bool {
         self.override_skills_dir.is_some()
+    }
+
+    pub fn resource_roots(&self) -> Vec<ResourceRoot> {
+        let mut roots = vec![
+            ResourceRoot {
+                kind: "skill".to_string(),
+                scope: "global".to_string(),
+                path_template: self.relative_skills_dir.clone(),
+                deploy: "symlink".to_string(),
+                scan: if self.recursive_scan {
+                    "recursive".to_string()
+                } else {
+                    "flat".to_string()
+                },
+            },
+            ResourceRoot {
+                kind: "skill".to_string(),
+                scope: "project".to_string(),
+                path_template: self.project_relative_skills_dir().to_string(),
+                deploy: "symlink".to_string(),
+                scan: if self.recursive_scan {
+                    "recursive".to_string()
+                } else {
+                    "flat".to_string()
+                },
+            },
+        ];
+
+        match self.key.as_str() {
+            "codex" => roots.push(ResourceRoot {
+                kind: "config".to_string(),
+                scope: "global".to_string(),
+                path_template: ".codex/config.toml".to_string(),
+                deploy: "merge_toml".to_string(),
+                scan: "file".to_string(),
+            }),
+            "claude_code" => {
+                roots.push(ResourceRoot {
+                    kind: "command".to_string(),
+                    scope: "global".to_string(),
+                    path_template: ".claude/commands".to_string(),
+                    deploy: "copy".to_string(),
+                    scan: "flat".to_string(),
+                });
+                roots.push(ResourceRoot {
+                    kind: "hook".to_string(),
+                    scope: "global".to_string(),
+                    path_template: ".claude/hooks".to_string(),
+                    deploy: "merge_json".to_string(),
+                    scan: "flat".to_string(),
+                });
+            }
+            _ => {}
+        }
+
+        roots
+    }
+
+    pub fn resource_path(&self, resource: &ResourceRoot) -> PathBuf {
+        if resource.scope == "global" {
+            Self::select_existing_or_default(&Self::candidate_paths(&resource.path_template))
+        } else {
+            PathBuf::from(&resource.path_template)
+        }
     }
 }
 
@@ -888,5 +961,55 @@ mod tests {
         assert_eq!(adapter.relative_skills_dir, ".config/opencode/skills");
         // Project path under workspace: .opencode/skills
         assert_eq!(adapter.project_relative_skills_dir(), ".opencode/skills");
+    }
+
+    #[test]
+    fn codex_exposes_skill_and_config_resource_roots() {
+        let adapter = default_tool_adapters()
+            .into_iter()
+            .find(|adapter| adapter.key == "codex")
+            .expect("codex adapter should exist");
+        let resources = adapter.resource_roots();
+
+        assert!(resources.iter().any(|resource| {
+            resource.kind == "skill"
+                && resource.scope == "global"
+                && resource.path_template == ".agents/skills"
+                && resource.deploy == "symlink"
+        }));
+        assert!(resources.iter().any(|resource| {
+            resource.kind == "skill"
+                && resource.scope == "project"
+                && resource.path_template == ".codex/skills"
+                && resource.deploy == "symlink"
+        }));
+        assert!(resources.iter().any(|resource| {
+            resource.kind == "config"
+                && resource.scope == "global"
+                && resource.path_template == ".codex/config.toml"
+                && resource.deploy == "merge_toml"
+        }));
+    }
+
+    #[test]
+    fn claude_code_exposes_commands_and_hooks() {
+        let adapter = default_tool_adapters()
+            .into_iter()
+            .find(|adapter| adapter.key == "claude_code")
+            .expect("claude_code adapter should exist");
+        let resources = adapter.resource_roots();
+
+        assert!(resources.iter().any(|resource| {
+            resource.kind == "command"
+                && resource.scope == "global"
+                && resource.path_template == ".claude/commands"
+                && resource.deploy == "copy"
+        }));
+        assert!(resources.iter().any(|resource| {
+            resource.kind == "hook"
+                && resource.scope == "global"
+                && resource.path_template == ".claude/hooks"
+                && resource.deploy == "merge_json"
+        }));
     }
 }

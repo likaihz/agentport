@@ -52,6 +52,18 @@ pub struct EnvTool {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_relative_skills_dir: Option<String>,
     pub is_custom: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<EnvToolResource>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvToolResource {
+    pub kind: String,
+    pub scope: String,
+    pub path: String,
+    pub deploy: String,
+    pub scan: String,
+    pub exists: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -614,6 +626,7 @@ fn build_tools(store: &SkillStore) -> BTreeMap<String, EnvTool> {
     tool_service::list_tool_info(store)
         .into_iter()
         .map(|tool| {
+            let resources = env_resources_for_tool(&tool);
             (
                 tool.key,
                 EnvTool {
@@ -623,8 +636,23 @@ fn build_tools(store: &SkillStore) -> BTreeMap<String, EnvTool> {
                     skills_dir: portable_home_path(&tool.skills_dir),
                     project_relative_skills_dir: tool.project_relative_skills_dir,
                     is_custom: tool.is_custom,
+                    resources,
                 },
             )
+        })
+        .collect()
+}
+
+fn env_resources_for_tool(tool: &tool_service::ToolInfo) -> Vec<EnvToolResource> {
+    tool.resources
+        .iter()
+        .map(|resource| EnvToolResource {
+            kind: resource.kind.clone(),
+            scope: resource.scope.clone(),
+            path: portable_home_path(&resource.path),
+            deploy: resource.deploy.clone(),
+            scan: resource.scan.clone(),
+            exists: resource.exists,
         })
         .collect()
 }
@@ -1143,5 +1171,48 @@ mod tests {
         assert_eq!(changed[0].id, "skill:review");
         assert_eq!(changed[0].expected_hash.as_deref(), Some("old"));
         assert_eq!(changed[0].current_hash.as_deref(), Some("new"));
+    }
+
+    #[test]
+    fn tool_resources_are_written_with_portable_paths() {
+        let tool = tool_service::ToolInfo {
+            key: "codex".to_string(),
+            display_name: "Codex".to_string(),
+            installed: true,
+            skills_dir: dirs::home_dir()
+                .unwrap()
+                .join(".agents")
+                .join("skills")
+                .to_string_lossy()
+                .to_string(),
+            enabled: true,
+            is_custom: false,
+            has_path_override: false,
+            project_relative_skills_dir: Some(".codex/skills".to_string()),
+            category: crate::core::tool_adapters::ToolCategory::Coding,
+            resources: vec![tool_service::ToolResourceInfo {
+                kind: "config".to_string(),
+                scope: "global".to_string(),
+                path: dirs::home_dir()
+                    .unwrap()
+                    .join(".codex")
+                    .join("config.toml")
+                    .to_string_lossy()
+                    .to_string(),
+                path_template: ".codex/config.toml".to_string(),
+                deploy: "merge_toml".to_string(),
+                scan: "file".to_string(),
+                exists: false,
+            }],
+        };
+
+        let resources = env_resources_for_tool(&tool);
+
+        assert_eq!(resources.len(), 1);
+        assert_eq!(resources[0].kind, "config");
+        assert_eq!(resources[0].scope, "global");
+        assert_eq!(resources[0].path, "~/.codex/config.toml");
+        assert_eq!(resources[0].deploy, "merge_toml");
+        assert_eq!(resources[0].scan, "file");
     }
 }
