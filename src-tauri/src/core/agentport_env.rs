@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use super::{
-    central_repo,
+    central_repo, content_hash,
     skill_store::{ScenarioRecord, SkillRecord, SkillStore},
     tool_service,
 };
@@ -709,8 +709,55 @@ fn build_artifacts(store: &SkillStore) -> Result<Vec<EnvArtifact>> {
             deployed_to,
         });
     }
+    artifacts.extend(build_resource_artifacts(store)?);
     artifacts.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(artifacts)
+}
+
+fn build_resource_artifacts(store: &SkillStore) -> Result<Vec<EnvArtifact>> {
+    let mut artifacts = Vec::new();
+    for tool in tool_service::list_tool_info(store) {
+        for resource in &tool.resources {
+            if let Some(artifact) = resource_artifact_for_tool_resource(&tool.key, resource) {
+                artifacts.push(artifact);
+            }
+        }
+    }
+    Ok(artifacts)
+}
+
+fn resource_artifact_for_tool_resource(
+    tool_key: &str,
+    resource: &tool_service::ToolResourceInfo,
+) -> Option<EnvArtifact> {
+    if !resource.exists || resource.kind == "skill" {
+        return None;
+    }
+    Some(EnvArtifact {
+        id: resource_artifact_id(tool_key, resource),
+        kind: resource.kind.clone(),
+        name: format!("{tool_key}:{}:{}", resource.scope, resource.kind),
+        path: portable_home_path(&resource.path),
+        source: EnvArtifactSource {
+            source_type: "tool_resource".to_string(),
+            confidence: "exact".to_string(),
+            package: None,
+            path: Some(resource.path_template.clone()),
+            revision: None,
+        },
+        owner: Some(EnvArtifactOwner {
+            owner_type: "tool".to_string(),
+            id: tool_key.to_string(),
+        }),
+        deployed_to: Vec::new(),
+    })
+}
+
+fn resource_artifact_id(tool_key: &str, resource: &tool_service::ToolResourceInfo) -> String {
+    format!(
+        "resource:{tool_key}:{}:{}:{}",
+        resource.scope, resource.kind, resource.path_template
+    )
 }
 
 fn build_skills(store: &SkillStore) -> Result<Vec<EnvSkill>> {
@@ -777,12 +824,25 @@ fn artifact_id_for_skill(skill: &SkillRecord) -> String {
 }
 
 fn artifact_content_hash(store: &SkillStore, artifact_id: &str) -> Result<Option<String>> {
-    let Some(skill_id) = artifact_id.strip_prefix("skill:") else {
-        return Ok(None);
-    };
-    Ok(store
-        .get_skill_by_id(skill_id)?
-        .and_then(|skill| skill.content_hash))
+    if let Some(skill_id) = artifact_id.strip_prefix("skill:") {
+        return Ok(store
+            .get_skill_by_id(skill_id)?
+            .and_then(|skill| skill.content_hash));
+    }
+
+    for tool in tool_service::list_tool_info(store) {
+        for resource in &tool.resources {
+            if resource.kind == "skill" || resource_artifact_id(&tool.key, resource) != artifact_id
+            {
+                continue;
+            }
+            let path = Path::new(&resource.path);
+            if path.exists() {
+                return Ok(content_hash::hash_path(path).ok());
+            }
+        }
+    }
+    Ok(None)
 }
 
 fn artifact_source_for_skill(skill: &SkillRecord, package_id: Option<&str>) -> EnvArtifactSource {
@@ -1214,5 +1274,36 @@ mod tests {
         assert_eq!(resources[0].path, "~/.codex/config.toml");
         assert_eq!(resources[0].deploy, "merge_toml");
         assert_eq!(resources[0].scan, "file");
+    }
+
+    #[test]
+    fn existing_non_skill_resource_becomes_artifact() {
+        let resource = tool_service::ToolResourceInfo {
+            kind: "config".to_string(),
+            scope: "global".to_string(),
+            path: dirs::home_dir()
+                .unwrap()
+                .join(".codex")
+                .join("config.toml")
+                .to_string_lossy()
+                .to_string(),
+            path_template: ".codex/config.toml".to_string(),
+            deploy: "merge_toml".to_string(),
+            scan: "file".to_string(),
+            exists: true,
+        };
+
+        let artifact = resource_artifact_for_tool_resource("codex", &resource).unwrap();
+
+        assert_eq!(
+            artifact.id,
+            "resource:codex:global:config:.codex/config.toml"
+        );
+        assert_eq!(artifact.kind, "config");
+        assert_eq!(artifact.path, "~/.codex/config.toml");
+        assert_eq!(artifact.source.source_type, "tool_resource");
+        assert_eq!(artifact.source.path.as_deref(), Some(".codex/config.toml"));
+        assert_eq!(artifact.owner.as_ref().unwrap().owner_type, "tool");
+        assert_eq!(artifact.owner.as_ref().unwrap().id, "codex");
     }
 }

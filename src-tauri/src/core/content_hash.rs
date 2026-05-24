@@ -43,6 +43,28 @@ pub fn hash_directory(dir: &Path) -> Result<String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
+pub fn hash_path(path: &Path) -> Result<String> {
+    if path.is_dir() {
+        return hash_directory(path);
+    }
+
+    let mut hasher = Sha256::new();
+    hasher.update(
+        path.file_name()
+            .map(|name| name.to_string_lossy())
+            .unwrap_or_default()
+            .as_bytes(),
+    );
+    hasher.update(std::fs::read(path)?);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = path.metadata()?.permissions().mode();
+        hasher.update((mode & 0o111).to_le_bytes());
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
