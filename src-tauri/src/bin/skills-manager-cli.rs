@@ -14,8 +14,8 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 
 #[derive(Parser, Debug)]
-#[command(name = "skills-manager-cli")]
-#[command(about = "Shared-core CLI for skills-manager", version)]
+#[command(name = "agentport")]
+#[command(about = "AgentPort CLI for portable AI agent environments", version)]
 struct Cli {
     #[arg(long, global = true)]
     json: bool,
