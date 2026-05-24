@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use super::{
     central_repo,
-    skill_store::{ScenarioRecord, SkillStore},
+    skill_store::{ScenarioRecord, SkillRecord, SkillStore},
     tool_service,
 };
 
@@ -23,6 +23,10 @@ pub struct EnvManifest {
     pub created_by: String,
     pub active_profile: Option<String>,
     pub repo: EnvRepo,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub packages: Vec<EnvPackage>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifacts: Vec<EnvArtifact>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub tools: BTreeMap<String, EnvTool>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -67,6 +71,9 @@ pub struct EnvSource {
     #[serde(rename = "type")]
     pub source_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
+    pub confidence: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolved_reference: Option<String>,
@@ -78,6 +85,72 @@ pub struct EnvSource {
     pub revision: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_revision: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvPackage {
+    pub id: String,
+    pub source: EnvPackageSource,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifacts: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvPackageSource {
+    #[serde(rename = "type")]
+    pub source_type: String,
+    pub confidence: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_reference: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_revision: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvArtifact {
+    pub id: String,
+    pub kind: String,
+    pub name: String,
+    pub path: String,
+    pub source: EnvArtifactSource,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<EnvArtifactOwner>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deployed_to: Vec<EnvDeployTarget>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvArtifactSource {
+    #[serde(rename = "type")]
+    pub source_type: String,
+    pub confidence: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvArtifactOwner {
+    #[serde(rename = "type")]
+    pub owner_type: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvDeployTarget {
+    pub tool: String,
+    pub path: String,
+    pub mode: String,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,7 +172,35 @@ pub struct EnvLock {
     pub generated_at: String,
     pub created_by: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub packages: Vec<EnvLockedPackage>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifacts: Vec<EnvLockedArtifact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skills: Vec<EnvLockedSkill>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvLockedPackage {
+    pub id: String,
+    pub source_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_reference: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifacts: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvLockedArtifact {
+    pub id: String,
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_package: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,6 +220,8 @@ pub struct EnvLockedSkill {
 pub struct EnvWriteReport {
     pub manifest_path: String,
     pub lock_path: String,
+    pub package_count: usize,
+    pub artifact_count: usize,
     pub skill_count: usize,
     pub profile_count: usize,
     pub tool_count: usize,
@@ -148,6 +251,8 @@ pub struct EnvDoctorReport {
     pub manifest_exists: bool,
     pub lock_exists: bool,
     pub skills_dir_exists: bool,
+    pub package_count: usize,
+    pub artifact_count: usize,
     pub skill_count: usize,
     pub profile_count: usize,
     pub installed_tool_count: usize,
@@ -165,6 +270,8 @@ pub fn lock_path() -> PathBuf {
 pub fn build_manifest_from_store(store: &SkillStore) -> Result<EnvManifest> {
     let generated_at = Utc::now().to_rfc3339();
     let active_profile = store.get_active_scenario_id()?;
+    let packages = build_packages(store)?;
+    let artifacts = build_artifacts(store)?;
     let tools = build_tools(store);
     let skills = build_skills(store)?;
     let profiles = build_profiles(store, active_profile.as_deref())?;
@@ -179,6 +286,8 @@ pub fn build_manifest_from_store(store: &SkillStore) -> Result<EnvManifest> {
             manifest_path: MANIFEST_FILE.to_string(),
             lock_path: LOCK_FILE.to_string(),
         },
+        packages,
+        artifacts,
         tools,
         skills,
         profiles,
@@ -186,6 +295,31 @@ pub fn build_manifest_from_store(store: &SkillStore) -> Result<EnvManifest> {
 }
 
 pub fn build_lock_from_store(store: &SkillStore) -> Result<EnvLock> {
+    let packages = build_packages(store)?;
+    let artifacts = build_artifacts(store)?;
+    let locked_packages = packages
+        .into_iter()
+        .map(|package| EnvLockedPackage {
+            id: package.id,
+            source_type: package.source.source_type,
+            resolved_reference: package.source.resolved_reference,
+            revision: package.source.revision,
+            remote_revision: package.source.remote_revision,
+            artifacts: package.artifacts,
+        })
+        .collect();
+    let locked_artifacts = artifacts
+        .into_iter()
+        .map(|artifact| EnvLockedArtifact {
+            content_hash: artifact_content_hash(store, &artifact.id).ok().flatten(),
+            id: artifact.id,
+            kind: artifact.kind,
+            owner_package: artifact
+                .owner
+                .as_ref()
+                .and_then(|owner| (owner.owner_type == "package").then(|| owner.id.clone())),
+        })
+        .collect();
     let mut skills: Vec<EnvLockedSkill> = store
         .get_all_skills()?
         .into_iter()
@@ -204,6 +338,8 @@ pub fn build_lock_from_store(store: &SkillStore) -> Result<EnvLock> {
         version: MANIFEST_VERSION,
         generated_at: Utc::now().to_rfc3339(),
         created_by: CREATED_BY.to_string(),
+        packages: locked_packages,
+        artifacts: locked_artifacts,
         skills,
     })
 }
@@ -229,6 +365,8 @@ pub fn write_current_environment(store: &SkillStore, overwrite: bool) -> Result<
     Ok(EnvWriteReport {
         manifest_path: manifest_path.to_string_lossy().to_string(),
         lock_path: lock_path.to_string_lossy().to_string(),
+        package_count: manifest.packages.len(),
+        artifact_count: manifest.artifacts.len(),
         skill_count: manifest.skills.len(),
         profile_count: manifest.profiles.len(),
         tool_count: manifest.tools.len(),
@@ -293,7 +431,14 @@ pub fn doctor(store: &SkillStore) -> Result<EnvDoctorReport> {
     let lock_path = lock_path();
     let manifest_exists = manifest_path.exists();
     let lock_exists = lock_path.exists();
+    let manifest = if manifest_exists {
+        read_manifest().ok()
+    } else {
+        None
+    };
     let skills_dir_exists = central_repo::skills_dir().is_dir();
+    let package_count = manifest.as_ref().map(|m| m.packages.len()).unwrap_or(0);
+    let artifact_count = manifest.as_ref().map(|m| m.artifacts.len()).unwrap_or(0);
     let skill_count = store.get_all_skills()?.len();
     let profile_count = store.get_all_scenarios()?.len();
     let installed_tool_count = tool_service::list_tool_info(store)
@@ -327,6 +472,8 @@ pub fn doctor(store: &SkillStore) -> Result<EnvDoctorReport> {
         manifest_exists,
         lock_exists,
         skills_dir_exists,
+        package_count,
+        artifact_count,
         skill_count,
         profile_count,
         installed_tool_count,
@@ -348,6 +495,13 @@ pub fn select_profile<'a>(
     }
 }
 
+pub fn packages_from_manifest_or_store(store: &SkillStore) -> Result<Vec<EnvPackage>> {
+    if manifest_path().exists() {
+        return Ok(read_manifest()?.packages);
+    }
+    build_packages(store)
+}
+
 fn build_tools(store: &SkillStore) -> BTreeMap<String, EnvTool> {
     tool_service::list_tool_info(store)
         .into_iter()
@@ -367,6 +521,62 @@ fn build_tools(store: &SkillStore) -> BTreeMap<String, EnvTool> {
         .collect()
 }
 
+fn build_packages(store: &SkillStore) -> Result<Vec<EnvPackage>> {
+    let mut packages = BTreeMap::<String, EnvPackage>::new();
+    for skill in store.get_all_skills()? {
+        let Some(package_id) = package_id_for_skill(&skill) else {
+            continue;
+        };
+        let artifact_id = artifact_id_for_skill(&skill);
+        packages
+            .entry(package_id.clone())
+            .and_modify(|package| {
+                if !package.artifacts.iter().any(|id| id == &artifact_id) {
+                    package.artifacts.push(artifact_id.clone());
+                    package.artifacts.sort();
+                }
+            })
+            .or_insert_with(|| EnvPackage {
+                id: package_id,
+                source: package_source_for_skill(&skill),
+                artifacts: vec![artifact_id],
+            });
+    }
+    Ok(packages.into_values().collect())
+}
+
+fn build_artifacts(store: &SkillStore) -> Result<Vec<EnvArtifact>> {
+    let mut artifacts = Vec::new();
+    for skill in store.get_all_skills()? {
+        let package_id = package_id_for_skill(&skill);
+        let deployed_to = store
+            .get_targets_for_skill(&skill.id)?
+            .into_iter()
+            .map(|target| EnvDeployTarget {
+                tool: target.tool,
+                path: portable_home_path(&target.target_path),
+                mode: target.mode,
+                status: target.status,
+            })
+            .collect();
+        let artifact_id = artifact_id_for_skill(&skill);
+        artifacts.push(EnvArtifact {
+            id: artifact_id,
+            kind: "skill".to_string(),
+            name: skill.name.clone(),
+            path: relative_skill_path(&skill.central_path),
+            source: artifact_source_for_skill(&skill, package_id.as_deref()),
+            owner: package_id.map(|id| EnvArtifactOwner {
+                owner_type: "package".to_string(),
+                id,
+            }),
+            deployed_to,
+        });
+    }
+    artifacts.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(artifacts)
+}
+
 fn build_skills(store: &SkillStore) -> Result<Vec<EnvSkill>> {
     let tags_map = store.get_tags_map()?;
     let mut skills = store
@@ -375,6 +585,7 @@ fn build_skills(store: &SkillStore) -> Result<Vec<EnvSkill>> {
         .map(|skill| {
             let tags = tags_map.get(&skill.id).cloned().unwrap_or_default();
             let local_source = matches!(skill.source_type.as_str(), "local" | "import");
+            let source = env_source_for_skill(&skill, local_source);
             EnvSkill {
                 id: skill.id,
                 name: skill.name,
@@ -382,19 +593,7 @@ fn build_skills(store: &SkillStore) -> Result<Vec<EnvSkill>> {
                 path: relative_skill_path(&skill.central_path),
                 enabled: skill.enabled,
                 tags,
-                source: EnvSource {
-                    source_type: skill.source_type,
-                    reference: if local_source { None } else { skill.source_ref },
-                    resolved_reference: if local_source {
-                        None
-                    } else {
-                        skill.source_ref_resolved
-                    },
-                    subpath: skill.source_subpath,
-                    branch: skill.source_branch,
-                    revision: skill.source_revision,
-                    remote_revision: skill.remote_revision,
-                },
+                source,
             }
         })
         .collect::<Vec<_>>();
@@ -404,6 +603,108 @@ fn build_skills(store: &SkillStore) -> Result<Vec<EnvSkill>> {
     }
     skills.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(skills)
+}
+
+fn env_source_for_skill(skill: &SkillRecord, local_source: bool) -> EnvSource {
+    EnvSource {
+        source_type: skill.source_type.clone(),
+        mode: local_source.then(|| "vendored".to_string()),
+        confidence: "exact".to_string(),
+        reference: if local_source {
+            None
+        } else {
+            skill.source_ref.clone()
+        },
+        resolved_reference: if local_source {
+            None
+        } else {
+            skill.source_ref_resolved.clone()
+        },
+        subpath: skill.source_subpath.clone(),
+        branch: skill.source_branch.clone(),
+        revision: skill.source_revision.clone(),
+        remote_revision: skill.remote_revision.clone(),
+    }
+}
+
+fn artifact_id_for_skill(skill: &SkillRecord) -> String {
+    format!("skill:{}", skill.id)
+}
+
+fn artifact_content_hash(store: &SkillStore, artifact_id: &str) -> Result<Option<String>> {
+    let Some(skill_id) = artifact_id.strip_prefix("skill:") else {
+        return Ok(None);
+    };
+    Ok(store
+        .get_skill_by_id(skill_id)?
+        .and_then(|skill| skill.content_hash))
+}
+
+fn artifact_source_for_skill(skill: &SkillRecord, package_id: Option<&str>) -> EnvArtifactSource {
+    if let Some(package_id) = package_id {
+        EnvArtifactSource {
+            source_type: "package_artifact".to_string(),
+            confidence: "exact".to_string(),
+            package: Some(package_id.to_string()),
+            path: skill.source_subpath.clone(),
+            revision: skill.source_revision.clone(),
+        }
+    } else {
+        let local = matches!(skill.source_type.as_str(), "local" | "import");
+        EnvArtifactSource {
+            source_type: if local {
+                "local_vendored".to_string()
+            } else {
+                skill.source_type.clone()
+            },
+            confidence: "exact".to_string(),
+            package: None,
+            path: Some(relative_skill_path(&skill.central_path)),
+            revision: skill.source_revision.clone(),
+        }
+    }
+}
+
+fn package_id_for_skill(skill: &SkillRecord) -> Option<String> {
+    match skill.source_type.as_str() {
+        "git" => source_identity(skill).map(|identity| format!("git:{identity}")),
+        "skillssh" => source_identity(skill).map(|identity| format!("skillssh:{identity}")),
+        _ => None,
+    }
+}
+
+fn package_source_for_skill(skill: &SkillRecord) -> EnvPackageSource {
+    let local = matches!(skill.source_type.as_str(), "local" | "import");
+    EnvPackageSource {
+        source_type: skill.source_type.clone(),
+        confidence: "exact".to_string(),
+        reference: if local {
+            None
+        } else {
+            skill.source_ref.clone()
+        },
+        resolved_reference: if local {
+            None
+        } else {
+            skill.source_ref_resolved.clone()
+        },
+        branch: skill.source_branch.clone(),
+        revision: skill.source_revision.clone(),
+        remote_revision: skill.remote_revision.clone(),
+    }
+}
+
+fn source_identity(skill: &SkillRecord) -> Option<String> {
+    skill
+        .source_ref_resolved
+        .as_ref()
+        .or(skill.source_ref.as_ref())
+        .map(|source| {
+            source
+                .trim_end_matches(".git")
+                .trim_end_matches('/')
+                .to_string()
+        })
 }
 
 fn build_profiles(store: &SkillStore, active_id: Option<&str>) -> Result<Vec<EnvProfile>> {
@@ -472,4 +773,88 @@ fn write_yaml<T: Serialize>(path: &PathBuf, value: &T) -> Result<()> {
         yaml.push('\n');
     }
     fs::write(path, yaml).with_context(|| format!("failed to write {}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn skill(source_type: &str) -> SkillRecord {
+        SkillRecord {
+            id: "review".to_string(),
+            name: "Review".to_string(),
+            description: None,
+            source_type: source_type.to_string(),
+            source_ref: Some("/Users/example/dev/review".to_string()),
+            source_ref_resolved: Some("https://github.com/acme/skills.git".to_string()),
+            source_subpath: Some("skills/review".to_string()),
+            source_branch: Some("main".to_string()),
+            source_revision: Some("abc123".to_string()),
+            remote_revision: Some("def456".to_string()),
+            central_path: central_repo::skills_dir()
+                .join("review")
+                .to_string_lossy()
+                .to_string(),
+            content_hash: Some("hash".to_string()),
+            enabled: true,
+            created_at: 0,
+            updated_at: 0,
+            status: "active".to_string(),
+            update_status: "current".to_string(),
+            last_checked_at: None,
+            last_check_error: None,
+        }
+    }
+
+    #[test]
+    fn local_source_is_vendored_and_redacts_original_path() {
+        let skill = skill("local");
+        let source = env_source_for_skill(&skill, true);
+
+        assert_eq!(source.source_type, "local");
+        assert_eq!(source.mode.as_deref(), Some("vendored"));
+        assert_eq!(source.confidence, "exact");
+        assert!(source.reference.is_none());
+        assert!(source.resolved_reference.is_none());
+    }
+
+    #[test]
+    fn git_skill_becomes_package_owned_artifact() {
+        let skill = skill("git");
+        let package_id = package_id_for_skill(&skill).unwrap();
+        let artifact_source = artifact_source_for_skill(&skill, Some(&package_id));
+
+        assert_eq!(package_id, "git:https://github.com/acme/skills");
+        assert_eq!(artifact_id_for_skill(&skill), "skill:review");
+        assert_eq!(artifact_source.source_type, "package_artifact");
+        assert_eq!(
+            artifact_source.package.as_deref(),
+            Some(package_id.as_str())
+        );
+        assert_eq!(artifact_source.path.as_deref(), Some("skills/review"));
+        assert_eq!(artifact_source.confidence, "exact");
+    }
+
+    #[test]
+    fn local_skill_has_no_package_owner() {
+        let skill = skill("local");
+
+        assert!(package_id_for_skill(&skill).is_none());
+        let artifact_source = artifact_source_for_skill(&skill, None);
+        assert_eq!(artifact_source.source_type, "local_vendored");
+        assert!(artifact_source.package.is_none());
+    }
+
+    #[test]
+    fn portable_home_path_replaces_home_prefix() {
+        let Some(home) = dirs::home_dir() else {
+            return;
+        };
+        let input = home.join(".codex").join("skills");
+
+        assert_eq!(
+            portable_home_path(&input.to_string_lossy()),
+            "~/.codex/skills"
+        );
+    }
 }

@@ -28,6 +28,7 @@ struct Cli {
 enum Commands {
     Repo(RepoArgs),
     Tools(ToolsArgs),
+    Packages(PackageArgs),
     Skills(SkillsArgs),
     Env(EnvArgs),
     #[command(alias = "scenarios")]
@@ -56,6 +57,18 @@ struct ToolsArgs {
 
 #[derive(Subcommand, Debug)]
 enum ToolsCommand {
+    List,
+}
+
+#[derive(Args, Debug)]
+struct PackageArgs {
+    #[command(subcommand)]
+    command: PackageCommand,
+}
+
+#[derive(Subcommand, Debug)]
+enum PackageCommand {
+    /// List packages from agentport.yaml, or current managed skills if no manifest exists.
     List,
 }
 
@@ -497,6 +510,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
     match cli.command {
         Commands::Repo(args) => run_repo(args, &store, cli.json),
         Commands::Tools(args) => run_tools(args, &store, cli.json),
+        Commands::Packages(args) => run_packages(args, &store, cli.json),
         Commands::Skills(args) => run_skills(args, &store, cli.json),
         Commands::Env(args) => run_env(args, &store, cli.json),
         Commands::Presets(args) => run_presets(args, &store, cli.json),
@@ -540,6 +554,18 @@ fn repo_status(store: &SkillStore) -> RepoStatus {
 fn run_tools(args: ToolsArgs, store: &SkillStore, json: bool) -> anyhow::Result<()> {
     match args.command {
         ToolsCommand::List => print_json(&tool_service::list_tool_info(store), json),
+    }
+    Ok(())
+}
+
+// ── packages ──────────────────────────────────────────────────────────────
+
+fn run_packages(args: PackageArgs, store: &SkillStore, json: bool) -> anyhow::Result<()> {
+    match args.command {
+        PackageCommand::List => {
+            let packages = agentport_env::packages_from_manifest_or_store(store)?;
+            print_json(&packages, json);
+        }
     }
     Ok(())
 }
