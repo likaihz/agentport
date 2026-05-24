@@ -179,6 +179,22 @@ impl ToolAdapter {
         ];
 
         match self.key.as_str() {
+            "cursor" => {
+                roots.push(ResourceRoot {
+                    kind: "mcp_config".to_string(),
+                    scope: "global".to_string(),
+                    path_template: ".cursor/mcp.json".to_string(),
+                    deploy: "merge_json".to_string(),
+                    scan: "file".to_string(),
+                });
+                roots.push(ResourceRoot {
+                    kind: "rule".to_string(),
+                    scope: "project".to_string(),
+                    path_template: ".cursor/rules".to_string(),
+                    deploy: "copy".to_string(),
+                    scan: "recursive".to_string(),
+                });
+            }
             "codex" => roots.push(ResourceRoot {
                 kind: "config".to_string(),
                 scope: "global".to_string(),
@@ -200,6 +216,13 @@ impl ToolAdapter {
                     path_template: ".claude/hooks".to_string(),
                     deploy: "merge_json".to_string(),
                     scan: "flat".to_string(),
+                });
+                roots.push(ResourceRoot {
+                    kind: "mcp_config".to_string(),
+                    scope: "project".to_string(),
+                    path_template: ".mcp.json".to_string(),
+                    deploy: "merge_json".to_string(),
+                    scan: "file".to_string(),
                 });
             }
             _ => {}
@@ -992,7 +1015,31 @@ mod tests {
     }
 
     #[test]
-    fn claude_code_exposes_commands_and_hooks() {
+    fn cursor_exposes_mcp_and_rules_resource_roots() {
+        let adapter = default_tool_adapters()
+            .into_iter()
+            .find(|adapter| adapter.key == "cursor")
+            .expect("cursor adapter should exist");
+        let resources = adapter.resource_roots();
+
+        assert!(resources.iter().any(|resource| {
+            resource.kind == "mcp_config"
+                && resource.scope == "global"
+                && resource.path_template == ".cursor/mcp.json"
+                && resource.deploy == "merge_json"
+                && resource.scan == "file"
+        }));
+        assert!(resources.iter().any(|resource| {
+            resource.kind == "rule"
+                && resource.scope == "project"
+                && resource.path_template == ".cursor/rules"
+                && resource.deploy == "copy"
+                && resource.scan == "recursive"
+        }));
+    }
+
+    #[test]
+    fn claude_code_exposes_commands_hooks_and_mcp_config() {
         let adapter = default_tool_adapters()
             .into_iter()
             .find(|adapter| adapter.key == "claude_code")
@@ -1010,6 +1057,13 @@ mod tests {
                 && resource.scope == "global"
                 && resource.path_template == ".claude/hooks"
                 && resource.deploy == "merge_json"
+        }));
+        assert!(resources.iter().any(|resource| {
+            resource.kind == "mcp_config"
+                && resource.scope == "project"
+                && resource.path_template == ".mcp.json"
+                && resource.deploy == "merge_json"
+                && resource.scan == "file"
         }));
     }
 }
