@@ -16,6 +16,8 @@ pub const MANIFEST_FILE: &str = "agentport.yaml";
 pub const LOCK_FILE: &str = "agentport.lock";
 const MANIFEST_VERSION: u32 = 1;
 const CREATED_BY: &str = "skills-manager/agentport-mvp";
+const SECRET_PLACEHOLDER_PREFIX: &str = "${AGENTPORT_SECRET:";
+const SECRET_PLACEHOLDER_SUFFIX: &str = "}";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnvManifest {
@@ -303,6 +305,18 @@ pub struct MachineLocalOrigin {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MachineSecretsOverlay {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub secrets: BTreeMap<String, MachineSecretValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MachineSecretValue {
+    pub value: String,
+    pub updated_at: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct EnvResourceActionReport {
     pub ok: bool,
@@ -380,6 +394,32 @@ pub fn linked_origin_path(origin_id: &str) -> Result<Option<PathBuf>> {
         .origins
         .get(origin_id)
         .map(|origin| PathBuf::from(&origin.path)))
+}
+
+pub fn read_machine_secrets_overlay() -> Result<MachineSecretsOverlay> {
+    ensure_machine_local_overlay()?;
+    let path = secrets_local_path();
+    if !path.exists() {
+        return Ok(MachineSecretsOverlay::default());
+    }
+    let raw =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    if raw.trim().is_empty() {
+        return Ok(MachineSecretsOverlay::default());
+    }
+    serde_yaml::from_str(&raw).with_context(|| format!("failed to parse {}", path.display()))
+}
+
+fn record_machine_secret(secret_id: &str, value: &str) -> Result<()> {
+    let mut overlay = read_machine_secrets_overlay()?;
+    overlay.secrets.insert(
+        secret_id.to_string(),
+        MachineSecretValue {
+            value: value.to_string(),
+            updated_at: Utc::now().to_rfc3339(),
+        },
+    );
+    write_yaml(&secrets_local_path(), &overlay)
 }
 
 pub fn build_manifest_from_store(store: &SkillStore) -> Result<EnvManifest> {
@@ -663,6 +703,11 @@ pub fn doctor(store: &SkillStore) -> Result<EnvDoctorReport> {
     }
     if installed_tool_count == 0 {
         warnings.push("no installed agent tools detected".to_string());
+    }
+    if let Some(manifest) = manifest.as_ref() {
+        for secret_id in missing_machine_secret_ids(manifest)? {
+            warnings.push(format!("missing machine-local secret: {secret_id}"));
+        }
     }
 
     Ok(EnvDoctorReport {
@@ -1379,6 +1424,43 @@ fn export_resource_path(
     overwrite: bool,
     dry_run: bool,
 ) -> Result<EnvResourceActionItem> {
+    if !dry_run && matches!(deploy, "merge_toml" | "merge_json") && source.is_file() {
+        let exported = export_structured_resource_content(id, source, deploy)?;
+        let status = if target.exists() {
+            if fs::read(target).unwrap_or_default() == exported {
+                "unchanged"
+            } else if overwrite {
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                fs::write(target, exported)
+                    .with_context(|| format!("failed to write {}", target.display()))?;
+                "updated"
+            } else {
+                "skipped_existing"
+            }
+        } else {
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(target, exported)
+                .with_context(|| format!("failed to write {}", target.display()))?;
+            "created"
+        };
+
+        return Ok(EnvResourceActionItem {
+            id: id.to_string(),
+            tool: tool.to_string(),
+            kind: kind.to_string(),
+            source_path: source.to_string_lossy().to_string(),
+            target_path: target.to_string_lossy().to_string(),
+            deploy: deploy.to_string(),
+            status: status.to_string(),
+            backup_path: None,
+            error: None,
+        });
+    }
+
     let status = if target.exists() {
         if paths_have_same_hash(source, target) {
             "unchanged"
@@ -1674,6 +1756,166 @@ fn resource_action_item(
     }
 }
 
+fn export_structured_resource_content(id: &str, source: &Path, deploy: &str) -> Result<Vec<u8>> {
+    let raw = fs::read_to_string(source)
+        .with_context(|| format!("failed to read {}", source.display()))?;
+    match deploy {
+        "merge_toml" => {
+            let mut value: toml::Value = toml::from_str(&raw).context("failed to parse TOML")?;
+            redact_toml_secrets(id, &mut value, &mut Vec::new())?;
+            let mut rendered = toml::to_string_pretty(&value)?;
+            if !rendered.ends_with('\n') {
+                rendered.push('\n');
+            }
+            Ok(rendered.into_bytes())
+        }
+        "merge_json" => {
+            let mut value: serde_json::Value =
+                serde_json::from_str(&raw).context("failed to parse JSON")?;
+            redact_json_secrets(id, &mut value, &mut Vec::new())?;
+            let mut rendered = serde_json::to_string_pretty(&value)?;
+            rendered.push('\n');
+            Ok(rendered.into_bytes())
+        }
+        _ => Ok(raw.into_bytes()),
+    }
+}
+
+fn redact_toml_secrets(id: &str, value: &mut toml::Value, path: &mut Vec<String>) -> Result<()> {
+    match value {
+        toml::Value::Table(table) => {
+            for (key, child) in table.iter_mut() {
+                path.push(key.clone());
+                redact_toml_secrets(id, child, path)?;
+                path.pop();
+            }
+        }
+        toml::Value::Array(items) => {
+            for (idx, child) in items.iter_mut().enumerate() {
+                path.push(idx.to_string());
+                redact_toml_secrets(id, child, path)?;
+                path.pop();
+            }
+        }
+        toml::Value::String(secret) if is_secret_path(path) && !is_secret_placeholder(secret) => {
+            let secret_id = secret_id_for_path(id, path);
+            record_machine_secret(&secret_id, secret)?;
+            *secret = secret_placeholder(&secret_id);
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn redact_json_secrets(
+    id: &str,
+    value: &mut serde_json::Value,
+    path: &mut Vec<String>,
+) -> Result<()> {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, child) in map.iter_mut() {
+                path.push(key.clone());
+                redact_json_secrets(id, child, path)?;
+                path.pop();
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for (idx, child) in items.iter_mut().enumerate() {
+                path.push(idx.to_string());
+                redact_json_secrets(id, child, path)?;
+                path.pop();
+            }
+        }
+        serde_json::Value::String(secret)
+            if is_secret_path(path) && !is_secret_placeholder(secret) =>
+        {
+            let secret_id = secret_id_for_path(id, path);
+            record_machine_secret(&secret_id, secret)?;
+            *secret = secret_placeholder(&secret_id);
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn secret_id_for_path(id: &str, path: &[String]) -> String {
+    format!("{id}#{}", path.join("."))
+}
+
+fn secret_placeholder(secret_id: &str) -> String {
+    format!("{SECRET_PLACEHOLDER_PREFIX}{secret_id}{SECRET_PLACEHOLDER_SUFFIX}")
+}
+
+fn is_secret_placeholder(value: &str) -> bool {
+    value.starts_with(SECRET_PLACEHOLDER_PREFIX) && value.ends_with(SECRET_PLACEHOLDER_SUFFIX)
+}
+
+fn is_secret_path(path: &[String]) -> bool {
+    path.last().map(|key| is_secret_key(key)).unwrap_or(false)
+}
+
+fn is_secret_key(key: &str) -> bool {
+    let normalized = key.to_ascii_lowercase().replace(['-', '_'], "");
+    normalized.contains("apikey")
+        || normalized.contains("token")
+        || normalized.contains("secret")
+        || normalized.contains("password")
+        || normalized.contains("credential")
+        || normalized.contains("privatekey")
+        || normalized == "authorization"
+}
+
+fn missing_machine_secret_ids(manifest: &EnvManifest) -> Result<Vec<String>> {
+    let present = read_machine_secrets_overlay_if_present()?.secrets;
+    let mut missing = BTreeSet::new();
+    for artifact in manifest
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.kind != "skill")
+    {
+        let path = resolve_repo_relative_path(&artifact.path);
+        if !path.is_file() {
+            continue;
+        }
+        let raw = fs::read_to_string(&path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        for secret_id in secret_placeholders_in_text(&raw) {
+            if !present.contains_key(&secret_id) {
+                missing.insert(secret_id);
+            }
+        }
+    }
+    Ok(missing.into_iter().collect())
+}
+
+fn read_machine_secrets_overlay_if_present() -> Result<MachineSecretsOverlay> {
+    let path = secrets_local_path();
+    if !path.exists() {
+        return Ok(MachineSecretsOverlay::default());
+    }
+    let raw =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    if raw.trim().is_empty() {
+        return Ok(MachineSecretsOverlay::default());
+    }
+    serde_yaml::from_str(&raw).with_context(|| format!("failed to parse {}", path.display()))
+}
+
+fn secret_placeholders_in_text(raw: &str) -> Vec<String> {
+    let mut values = Vec::new();
+    let mut rest = raw;
+    while let Some(start) = rest.find(SECRET_PLACEHOLDER_PREFIX) {
+        let after_prefix = &rest[start + SECRET_PLACEHOLDER_PREFIX.len()..];
+        let Some(end) = after_prefix.find(SECRET_PLACEHOLDER_SUFFIX) else {
+            break;
+        };
+        values.push(after_prefix[..end].to_string());
+        rest = &after_prefix[end + SECRET_PLACEHOLDER_SUFFIX.len()..];
+    }
+    values
+}
+
 fn merge_toml_documents(current: &str, shared: &str) -> Result<String> {
     let mut base = if current.trim().is_empty() {
         toml::Value::Table(Default::default())
@@ -1690,6 +1932,11 @@ fn merge_toml_documents(current: &str, shared: &str) -> Result<String> {
 }
 
 fn merge_toml_values(base: &mut toml::Value, overlay: toml::Value) {
+    if let toml::Value::String(value) = &overlay {
+        if is_secret_placeholder(value) {
+            return;
+        }
+    }
     match (base, overlay) {
         (toml::Value::Table(base_table), toml::Value::Table(overlay_table)) => {
             for (key, value) in overlay_table {
@@ -1719,6 +1966,11 @@ fn merge_json_documents(current: &str, shared: &str) -> Result<String> {
 }
 
 fn merge_json_values(base: &mut serde_json::Value, overlay: serde_json::Value) {
+    if let serde_json::Value::String(value) = &overlay {
+        if is_secret_placeholder(value) {
+            return;
+        }
+    }
     match (base, overlay) {
         (serde_json::Value::Object(base_map), serde_json::Value::Object(overlay_map)) => {
             for (key, value) in overlay_map {
@@ -2211,6 +2463,189 @@ temperature = 0.1
         assert!(written.contains("approval_policy = \"on-request\""));
 
         central_repo::set_test_base_dir_override(None);
+    }
+
+    #[test]
+    fn resource_export_redacts_toml_secrets_to_machine_overlay() {
+        let _guard = central_repo::test_base_dir_lock();
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().join("repo");
+        central_repo::set_test_base_dir_override(Some(base.clone()));
+        std::fs::create_dir_all(central_repo::skills_dir()).unwrap();
+        let source = tmp.path().join("config.toml");
+        let target =
+            central_repo::skills_dir().join("artifacts/codex/global/config/.codex/config.toml");
+        std::fs::write(
+            &source,
+            "model = \"gpt-5\"\napi_key = \"sk-live\"\n\n[mcp_servers.github.env]\nGITHUB_TOKEN = \"ghp-live\"\n",
+        )
+        .unwrap();
+
+        export_resource_path(
+            "resource:codex:global:config:.codex/config.toml",
+            "codex",
+            "config",
+            &source,
+            &target,
+            "merge_toml",
+            true,
+            false,
+        )
+        .unwrap();
+
+        let exported = std::fs::read_to_string(&target).unwrap();
+        assert!(exported.contains("model = \"gpt-5\""));
+        assert!(exported.contains("api_key = \"${AGENTPORT_SECRET:resource:codex:global:config:.codex/config.toml#api_key}\""));
+        assert!(exported.contains("GITHUB_TOKEN = \"${AGENTPORT_SECRET:resource:codex:global:config:.codex/config.toml#mcp_servers.github.env.GITHUB_TOKEN}\""));
+        assert!(!exported.contains("sk-live"));
+        assert!(!exported.contains("ghp-live"));
+
+        let secrets = read_machine_secrets_overlay().unwrap();
+        assert_eq!(
+            secrets.secrets["resource:codex:global:config:.codex/config.toml#api_key"].value,
+            "sk-live"
+        );
+        assert_eq!(
+            secrets.secrets
+                ["resource:codex:global:config:.codex/config.toml#mcp_servers.github.env.GITHUB_TOKEN"]
+                .value,
+            "ghp-live"
+        );
+
+        central_repo::set_test_base_dir_override(None);
+    }
+
+    #[test]
+    fn resource_export_redacts_json_secrets_to_machine_overlay() {
+        let _guard = central_repo::test_base_dir_lock();
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().join("repo");
+        central_repo::set_test_base_dir_override(Some(base.clone()));
+        std::fs::create_dir_all(central_repo::skills_dir()).unwrap();
+        let source = tmp.path().join("mcp.json");
+        let target =
+            central_repo::skills_dir().join("artifacts/cursor/global/mcp_config/.cursor/mcp.json");
+        std::fs::write(
+            &source,
+            r#"{"mcpServers":{"github":{"url":"https://example.test","env":{"GITHUB_TOKEN":"ghp-live"}}}}"#,
+        )
+        .unwrap();
+
+        export_resource_path(
+            "resource:cursor:global:mcp_config:.cursor/mcp.json",
+            "cursor",
+            "mcp_config",
+            &source,
+            &target,
+            "merge_json",
+            true,
+            false,
+        )
+        .unwrap();
+
+        let exported = std::fs::read_to_string(&target).unwrap();
+        assert!(exported.contains("\"url\": \"https://example.test\""));
+        assert!(exported.contains("\"GITHUB_TOKEN\": \"${AGENTPORT_SECRET:resource:cursor:global:mcp_config:.cursor/mcp.json#mcpServers.github.env.GITHUB_TOKEN}\""));
+        assert!(!exported.contains("ghp-live"));
+
+        let secrets = read_machine_secrets_overlay().unwrap();
+        assert_eq!(
+            secrets.secrets
+                ["resource:cursor:global:mcp_config:.cursor/mcp.json#mcpServers.github.env.GITHUB_TOKEN"]
+                .value,
+            "ghp-live"
+        );
+
+        central_repo::set_test_base_dir_override(None);
+    }
+
+    #[test]
+    fn doctor_warns_about_missing_machine_secrets_without_values() {
+        let _guard = central_repo::test_base_dir_lock();
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().join("repo");
+        central_repo::set_test_base_dir_override(Some(base.clone()));
+        std::fs::create_dir_all(central_repo::skills_dir()).unwrap();
+        let store = SkillStore::new(&base.join("test.db")).unwrap();
+        let artifact_rel = "artifacts/codex/global/config/.codex/config.toml";
+        std::fs::create_dir_all(
+            central_repo::skills_dir()
+                .join(artifact_rel)
+                .parent()
+                .unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            central_repo::skills_dir().join(artifact_rel),
+            "api_key = \"${AGENTPORT_SECRET:resource:codex:global:config:.codex/config.toml#api_key}\"\n",
+        )
+        .unwrap();
+        let manifest = EnvManifest {
+            version: 1,
+            generated_at: "now".to_string(),
+            created_by: "test".to_string(),
+            active_profile: None,
+            repo: EnvRepo {
+                layout: "skills-root-v1".to_string(),
+                manifest_path: MANIFEST_FILE.to_string(),
+                lock_path: LOCK_FILE.to_string(),
+            },
+            packages: Vec::new(),
+            artifacts: vec![EnvArtifact {
+                id: "resource:codex:global:config:.codex/config.toml".to_string(),
+                kind: "config".to_string(),
+                name: "codex:global:config".to_string(),
+                path: artifact_rel.to_string(),
+                source: EnvArtifactSource {
+                    source_type: "tool_resource".to_string(),
+                    confidence: "exact".to_string(),
+                    package: None,
+                    path: Some(".codex/config.toml".to_string()),
+                    revision: None,
+                },
+                owner: None,
+                deployed_to: Vec::new(),
+            }],
+            tools: BTreeMap::new(),
+            skills: Vec::new(),
+            profiles: Vec::new(),
+        };
+        write_yaml(&manifest_path(), &manifest).unwrap();
+
+        let report = doctor(&store).unwrap();
+        let warnings = report.warnings.join("\n");
+
+        assert!(warnings.contains(
+            "missing machine-local secret: resource:codex:global:config:.codex/config.toml#api_key"
+        ));
+        assert!(!warnings.contains("sk-live"));
+
+        central_repo::set_test_base_dir_override(None);
+    }
+
+    #[test]
+    fn merge_toml_documents_preserves_local_secret_when_shared_has_placeholder() {
+        let current = "model = \"gpt-5\"\napi_key = \"local-secret\"\n";
+        let shared = "model = \"gpt-5.1\"\napi_key = \"${AGENTPORT_SECRET:codex#api_key}\"\n";
+
+        let merged = merge_toml_documents(current, shared).unwrap();
+
+        assert!(merged.contains("model = \"gpt-5.1\""));
+        assert!(merged.contains("api_key = \"local-secret\""));
+        assert!(!merged.contains("AGENTPORT_SECRET"));
+    }
+
+    #[test]
+    fn merge_json_documents_preserves_local_secret_when_shared_has_placeholder() {
+        let current =
+            r#"{"mcpServers":{"github":{"url":"https://old","env":{"GITHUB_TOKEN":"local"}}}}"#;
+        let shared = r#"{"mcpServers":{"github":{"url":"https://new","env":{"GITHUB_TOKEN":"${AGENTPORT_SECRET:cursor#token}"}}}}"#;
+
+        let merged = merge_json_documents(current, shared).unwrap();
+
+        assert!(merged.contains("\"url\": \"https://new\""));
+        assert!(merged.contains("\"GITHUB_TOKEN\": \"local\""));
+        assert!(!merged.contains("AGENTPORT_SECRET"));
     }
 
     #[test]
