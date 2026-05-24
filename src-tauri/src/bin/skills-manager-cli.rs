@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{anyhow, bail};
 use app_lib::commands::skills as cmd;
@@ -271,6 +272,13 @@ enum SkillsCommand {
     },
     SyncIn {
         reference: String,
+    },
+    Watch {
+        reference: Option<String>,
+        #[arg(long)]
+        once: bool,
+        #[arg(long, default_value_t = 2000)]
+        interval_ms: u64,
     },
     PullTarget {
         reference: String,
@@ -561,6 +569,27 @@ struct SkillTargetActionReport {
     tool: String,
     target_path: String,
     mode: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SkillWatchReport {
+    ok: bool,
+    once: bool,
+    checked: usize,
+    updated: usize,
+    items: Vec<SkillWatchItem>,
+}
+
+#[derive(Debug, Serialize)]
+struct SkillWatchItem {
+    skill_id: String,
+    name: String,
+    source_type: String,
+    status: String,
+    source_hash: Option<String>,
+    central_hash: Option<String>,
+    recorded_hash: Option<String>,
+    error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1524,6 +1553,13 @@ fn run_skills(args: SkillsArgs, store: &SkillStore, json: bool) -> anyhow::Resul
             let report = run_sync_in(store, &reference)?;
             print_json(&report, json);
         }
+        SkillsCommand::Watch {
+            reference,
+            once,
+            interval_ms,
+        } => {
+            run_watch(store, reference.as_deref(), once, interval_ms, json)?;
+        }
         SkillsCommand::PullTarget { reference, tool } => {
             let report = run_pull_target(store, &reference, &tool)?;
             print_json(&report, json);
@@ -1837,6 +1873,200 @@ fn run_sync_in(store: &SkillStore, reference: &str) -> anyhow::Result<SkillSyncI
         name: refreshed.name,
         central_path: refreshed.central_path,
     })
+}
+
+fn run_watch(
+    store: &SkillStore,
+    reference: Option<&str>,
+    once: bool,
+    interval_ms: u64,
+    json: bool,
+) -> anyhow::Result<()> {
+    loop {
+        let report = run_watch_once(store, reference, once)?;
+        print_json(&report, json);
+        if once {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(interval_ms.max(250)));
+    }
+}
+
+fn run_watch_once(
+    store: &SkillStore,
+    reference: Option<&str>,
+    once: bool,
+) -> anyhow::Result<SkillWatchReport> {
+    let targets = if let Some(reference) = reference {
+        vec![resolve_skill(store, reference)?]
+    } else {
+        store
+            .get_all_skills()?
+            .into_iter()
+            .filter(|skill| is_watchable_local_source(&skill.source_type))
+            .collect()
+    };
+    let mut items = Vec::new();
+    let mut updated = 0;
+
+    for skill in targets {
+        let item = watch_local_skill_once(store, &skill)?;
+        if item.status == "updated" {
+            updated += 1;
+        }
+        items.push(item);
+    }
+    if updated > 0 {
+        refresh_agentport_environment_if_present(store)?;
+    }
+
+    Ok(SkillWatchReport {
+        ok: items.iter().all(|item| item.error.is_none()),
+        once,
+        checked: items.len(),
+        updated,
+        items,
+    })
+}
+
+fn watch_local_skill_once(
+    store: &SkillStore,
+    skill: &app_lib::core::skill_store::SkillRecord,
+) -> anyhow::Result<SkillWatchItem> {
+    if !is_watchable_local_source(&skill.source_type) {
+        return Ok(watch_item(
+            skill,
+            "unsupported",
+            None,
+            None,
+            skill.content_hash.clone(),
+            Some("skill is not a linked local source".to_string()),
+        ));
+    }
+    let Some(source_path) = local_watch_source_path(skill) else {
+        return Ok(watch_item(
+            skill,
+            "missing_source",
+            None,
+            None,
+            skill.content_hash.clone(),
+            Some("local source path is missing on this machine".to_string()),
+        ));
+    };
+    if !source_path.is_dir() {
+        return Ok(watch_item(
+            skill,
+            "missing_source",
+            None,
+            None,
+            skill.content_hash.clone(),
+            Some(format!("local source path is missing: {}", source_path.display())),
+        ));
+    }
+
+    let source_hash = content_hash::hash_directory(&source_path)?;
+    let central_path = PathBuf::from(&skill.central_path);
+    let central_hash = content_hash::hash_directory(&central_path)?;
+    let recorded_hash = expected_watch_hash(skill);
+    let central_matches_recorded = recorded_hash.as_deref() == Some(central_hash.as_str());
+    let source_matches_recorded = recorded_hash.as_deref() == Some(source_hash.as_str());
+
+    if source_hash == central_hash {
+        return Ok(watch_item(
+            skill,
+            "unchanged",
+            Some(source_hash),
+            Some(central_hash),
+            recorded_hash,
+            None,
+        ));
+    }
+    if !central_matches_recorded && !source_matches_recorded {
+        return Ok(watch_item(
+            skill,
+            "conflict",
+            Some(source_hash),
+            Some(central_hash),
+            recorded_hash,
+            Some("local source and central copy both changed".to_string()),
+        ));
+    }
+    if !central_matches_recorded {
+        return Ok(watch_item(
+            skill,
+            "central_changed",
+            Some(source_hash),
+            Some(central_hash),
+            recorded_hash,
+            Some("central copy changed; refusing to overwrite from source".to_string()),
+        ));
+    }
+
+    match cmd::reimport_local_skill_internal(store, &skill.id) {
+        Ok(_) => Ok(watch_item(
+            skill,
+            "updated",
+            Some(source_hash),
+            Some(central_hash),
+            recorded_hash,
+            None,
+        )),
+        Err(err) => Ok(watch_item(
+            skill,
+            "error",
+            Some(source_hash),
+            Some(central_hash),
+            recorded_hash,
+            Some(err.message),
+        )),
+    }
+}
+
+fn watch_item(
+    skill: &app_lib::core::skill_store::SkillRecord,
+    status: &str,
+    source_hash: Option<String>,
+    central_hash: Option<String>,
+    recorded_hash: Option<String>,
+    error: Option<String>,
+) -> SkillWatchItem {
+    SkillWatchItem {
+        skill_id: skill.id.clone(),
+        name: skill.name.clone(),
+        source_type: skill.source_type.clone(),
+        status: status.to_string(),
+        source_hash,
+        central_hash,
+        recorded_hash,
+        error,
+    }
+}
+
+fn is_watchable_local_source(source_type: &str) -> bool {
+    matches!(source_type, "local" | "import" | "local_linked")
+}
+
+fn local_watch_source_path(skill: &app_lib::core::skill_store::SkillRecord) -> Option<PathBuf> {
+    match skill.source_type.as_str() {
+        "local_linked" => skill.source_ref_resolved.as_ref().map(PathBuf::from),
+        _ => skill.source_ref.as_ref().map(PathBuf::from),
+    }
+}
+
+fn expected_watch_hash(skill: &app_lib::core::skill_store::SkillRecord) -> Option<String> {
+    if agentport_env::lock_path().exists() {
+        if let Ok(lock) = agentport_env::read_lock() {
+            let artifact_id = format!("skill:{}", skill.id);
+            if let Some(artifact) = lock
+                .artifacts
+                .into_iter()
+                .find(|artifact| artifact.id == artifact_id)
+            {
+                return artifact.content_hash;
+            }
+        }
+    }
+    skill.content_hash.clone()
 }
 
 fn run_pull_target(
@@ -2216,22 +2446,24 @@ fn run_update(
                     },
                 }
             }
-            "local" | "import" => match cmd::reimport_local_skill_internal(store, &skill.id) {
-                Ok(_) => UpdateReport {
-                    skill_id: skill.id.clone(),
-                    name: skill.name.clone(),
-                    source_type: skill.source_type.clone(),
-                    refreshed: true,
-                    error: None,
-                },
-                Err(e) => UpdateReport {
-                    skill_id: skill.id.clone(),
-                    name: skill.name.clone(),
-                    source_type: skill.source_type.clone(),
-                    refreshed: false,
-                    error: Some(e.message.clone()),
-                },
-            },
+            "local" | "import" | "local_linked" => {
+                match cmd::reimport_local_skill_internal(store, &skill.id) {
+                    Ok(_) => UpdateReport {
+                        skill_id: skill.id.clone(),
+                        name: skill.name.clone(),
+                        source_type: skill.source_type.clone(),
+                        refreshed: true,
+                        error: None,
+                    },
+                    Err(e) => UpdateReport {
+                        skill_id: skill.id.clone(),
+                        name: skill.name.clone(),
+                        source_type: skill.source_type.clone(),
+                        refreshed: false,
+                        error: Some(e.message.clone()),
+                    },
+                }
+            }
             other => UpdateReport {
                 skill_id: skill.id.clone(),
                 name: skill.name.clone(),
