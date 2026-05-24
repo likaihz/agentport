@@ -70,6 +70,16 @@ struct PackageArgs {
 enum PackageCommand {
     /// List packages from agentport.yaml, or current managed skills if no manifest exists.
     List,
+    /// Install every skill found in a local or git package.
+    Install {
+        reference: String,
+        #[arg(long, conflicts_with = "git")]
+        local: bool,
+        #[arg(long, conflicts_with = "local")]
+        git: bool,
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Args, Debug)]
@@ -422,6 +432,24 @@ struct SkillCreateReport {
 }
 
 #[derive(Debug, Serialize)]
+struct PackageInstallReport {
+    ok: bool,
+    reference: String,
+    source_type: String,
+    package_id: Option<String>,
+    dry_run: bool,
+    candidates: Vec<PackageSkillCandidate>,
+    installed: Vec<InstallReport>,
+}
+
+#[derive(Debug, Serialize)]
+struct PackageSkillCandidate {
+    name: String,
+    path: String,
+    subpath: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 struct SkillSyncInReport {
     ok: bool,
     skill_id: String,
@@ -620,6 +648,15 @@ fn run_packages(args: PackageArgs, store: &SkillStore, json: bool) -> anyhow::Re
             let packages = agentport_env::packages_from_manifest_or_store(store)?;
             print_json(&packages, json);
         }
+        PackageCommand::Install {
+            reference,
+            local,
+            git,
+            dry_run,
+        } => {
+            let report = run_package_install(store, &reference, local, git, dry_run)?;
+            print_json(&report, json);
+        }
     }
     Ok(())
 }
@@ -708,6 +745,206 @@ fn run_env_apply(
         targets,
         applied: !dry_run,
     })
+}
+
+fn run_package_install(
+    store: &SkillStore,
+    reference: &str,
+    force_local: bool,
+    force_git: bool,
+    dry_run: bool,
+) -> anyhow::Result<PackageInstallReport> {
+    let package_kind = classify_package_ref(reference, force_local, force_git)?;
+    match package_kind {
+        PackageInstallKind::Local => install_local_package(store, reference, dry_run),
+        PackageInstallKind::Git => install_git_package(store, reference, dry_run),
+    }
+}
+
+fn install_local_package(
+    store: &SkillStore,
+    reference: &str,
+    dry_run: bool,
+) -> anyhow::Result<PackageInstallReport> {
+    let package_root = expand_path(reference)?;
+    if !package_root.exists() {
+        bail!("local package path does not exist: {}", package_root.display());
+    }
+    let skill_dirs = agentport_env::discover_skill_dirs(&package_root)?;
+    let candidates = package_candidates(&package_root, &skill_dirs);
+    if dry_run {
+        return Ok(PackageInstallReport {
+            ok: true,
+            reference: reference.to_string(),
+            source_type: "local_package".to_string(),
+            package_id: package_root
+                .file_name()
+                .map(|name| format!("local:{}", name.to_string_lossy())),
+            dry_run,
+            candidates,
+            installed: Vec::new(),
+        });
+    }
+
+    let mut installed = Vec::new();
+    for skill_dir in skill_dirs {
+        let subpath = relative_subpath(&package_root, &skill_dir);
+        let result = installer::install_from_local(&skill_dir, None)?;
+        let metadata = cmd::InstallSourceMetadata {
+            source_type: "local_package".to_string(),
+            source_ref: Some(package_root.to_string_lossy().to_string()),
+            source_ref_resolved: None,
+            source_subpath: subpath,
+            source_branch: None,
+            source_revision: None,
+            remote_revision: None,
+            update_status: "local_only".to_string(),
+        };
+        let skill_id = cmd::store_installed_skill_unlocked(store, &result, &metadata, None)
+            .map_err(map_app_err)?;
+        installed.push(InstallReport {
+            ok: true,
+            skill_id,
+            name: result.name,
+            central_path: result.central_path.to_string_lossy().to_string(),
+            source_type: "local_package".to_string(),
+            synced: false,
+            preset_id: None,
+        });
+    }
+
+    Ok(PackageInstallReport {
+        ok: true,
+        reference: reference.to_string(),
+        source_type: "local_package".to_string(),
+        package_id: package_root
+            .file_name()
+            .map(|name| format!("local:{}", name.to_string_lossy())),
+        dry_run,
+        candidates,
+        installed,
+    })
+}
+
+fn install_git_package(
+    store: &SkillStore,
+    reference: &str,
+    dry_run: bool,
+) -> anyhow::Result<PackageInstallReport> {
+    git_fetcher::validate_git_url(reference)?;
+    let proxy_url = store.proxy_url();
+    let parsed = git_fetcher::parse_git_source_resolved(reference, proxy_url.as_deref());
+    let cancel = Arc::new(AtomicBool::new(false));
+    let temp_dir = git_fetcher::clone_repo_ref(
+        &parsed.clone_url,
+        parsed.branch.as_deref(),
+        Some(&cancel),
+        proxy_url.as_deref(),
+    )?;
+    let revision = git_fetcher::get_head_revision(&temp_dir)?;
+    let skill_dirs = agentport_env::discover_skill_dirs(&temp_dir)?;
+    let candidates = package_candidates(&temp_dir, &skill_dirs);
+    let package_id = Some(format!(
+        "git:{}",
+        parsed
+            .clone_url
+            .trim_end_matches(".git")
+            .trim_end_matches('/')
+    ));
+
+    if dry_run {
+        git_fetcher::cleanup_temp(&temp_dir);
+        return Ok(PackageInstallReport {
+            ok: true,
+            reference: reference.to_string(),
+            source_type: "git".to_string(),
+            package_id,
+            dry_run,
+            candidates,
+            installed: Vec::new(),
+        });
+    }
+
+    let mut installed = Vec::new();
+    for skill_dir in skill_dirs {
+        let subpath = relative_subpath(&temp_dir, &skill_dir);
+        let result = installer::install_from_git_dir(&skill_dir, None)?;
+        let metadata = cmd::InstallSourceMetadata {
+            source_type: "git".to_string(),
+            source_ref: Some(reference.to_string()),
+            source_ref_resolved: Some(parsed.clone_url.clone()),
+            source_subpath: subpath,
+            source_branch: parsed.branch.clone(),
+            source_revision: Some(revision.clone()),
+            remote_revision: Some(revision.clone()),
+            update_status: "current".to_string(),
+        };
+        let skill_id = cmd::store_installed_skill_unlocked(store, &result, &metadata, None)
+            .map_err(map_app_err)?;
+        installed.push(InstallReport {
+            ok: true,
+            skill_id,
+            name: result.name,
+            central_path: result.central_path.to_string_lossy().to_string(),
+            source_type: "git".to_string(),
+            synced: false,
+            preset_id: None,
+        });
+    }
+    git_fetcher::cleanup_temp(&temp_dir);
+
+    Ok(PackageInstallReport {
+        ok: true,
+        reference: reference.to_string(),
+        source_type: "git".to_string(),
+        package_id,
+        dry_run,
+        candidates,
+        installed,
+    })
+}
+
+fn package_candidates(root: &Path, skill_dirs: &[PathBuf]) -> Vec<PackageSkillCandidate> {
+    skill_dirs
+        .iter()
+        .map(|path| PackageSkillCandidate {
+            name: skill_metadata::infer_skill_name(path),
+            path: path.to_string_lossy().to_string(),
+            subpath: relative_subpath(root, path),
+        })
+        .collect()
+}
+
+fn relative_subpath(root: &Path, path: &Path) -> Option<String> {
+    path.strip_prefix(root)
+        .ok()
+        .map(|relative| relative.to_string_lossy().to_string())
+}
+
+fn classify_package_ref(
+    reference: &str,
+    force_local: bool,
+    force_git: bool,
+) -> anyhow::Result<PackageInstallKind> {
+    if force_local {
+        return Ok(PackageInstallKind::Local);
+    }
+    if force_git {
+        return Ok(PackageInstallKind::Git);
+    }
+    if reference.starts_with("./")
+        || reference.starts_with("../")
+        || reference.starts_with('/')
+        || reference.starts_with("~/")
+    {
+        return Ok(PackageInstallKind::Local);
+    }
+    Ok(PackageInstallKind::Git)
+}
+
+enum PackageInstallKind {
+    Local,
+    Git,
 }
 
 // ── skills ────────────────────────────────────────────────────────────────

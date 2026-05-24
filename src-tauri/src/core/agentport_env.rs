@@ -3,7 +3,8 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 use super::{
     central_repo,
@@ -510,6 +511,33 @@ pub fn packages_from_manifest_or_store(store: &SkillStore) -> Result<Vec<EnvPack
     build_packages(store)
 }
 
+pub fn discover_skill_dirs(root: &Path) -> Result<Vec<PathBuf>> {
+    let mut candidates = Vec::new();
+    for entry in WalkDir::new(root)
+        .max_depth(6)
+        .into_iter()
+        .filter_entry(|entry| entry.file_name() != ".git")
+    {
+        let entry = entry?;
+        if entry.file_type().is_dir() && super::skill_metadata::is_valid_skill_dir(entry.path()) {
+            candidates.push(entry.path().to_path_buf());
+        }
+    }
+    candidates.sort();
+
+    let mut selected: Vec<PathBuf> = Vec::new();
+    'outer: for candidate in candidates {
+        for existing in &selected {
+            if candidate.starts_with(existing) {
+                continue 'outer;
+            }
+        }
+        selected.push(candidate);
+    }
+
+    Ok(selected)
+}
+
 pub fn export_bootstrap_skill(
     profile: Option<&str>,
     destination: PathBuf,
@@ -711,6 +739,11 @@ fn package_id_for_skill(skill: &SkillRecord) -> Option<String> {
     match skill.source_type.as_str() {
         "git" => source_identity(skill).map(|identity| format!("git:{identity}")),
         "skillssh" => source_identity(skill).map(|identity| format!("skillssh:{identity}")),
+        "local_package" => skill
+            .source_ref
+            .as_ref()
+            .and_then(|source| Path::new(source).file_name())
+            .map(|name| format!("local:{}", name.to_string_lossy())),
         _ => None,
     }
 }
@@ -737,7 +770,10 @@ fn package_source_for_skill(skill: &SkillRecord) -> EnvPackageSource {
 }
 
 fn is_local_source_type(source_type: &str) -> bool {
-    matches!(source_type, "local" | "import" | "local_created")
+    matches!(
+        source_type,
+        "local" | "import" | "local_created" | "local_package"
+    )
 }
 
 fn source_identity(skill: &SkillRecord) -> Option<String> {
@@ -956,5 +992,26 @@ mod tests {
         assert!(markdown.contains("env diff personal-default"));
         assert!(markdown.contains("ask for confirmation"));
         assert!(markdown.contains("Do not edit secrets"));
+    }
+
+    #[test]
+    fn discover_skill_dirs_finds_multiple_skills_and_skips_nested_children() {
+        let tmp = tempfile::tempdir().unwrap();
+        let alpha = tmp.path().join("skills").join("alpha");
+        let beta = tmp.path().join("skills").join("beta");
+        let nested = alpha.join("nested");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::create_dir_all(&beta).unwrap();
+        std::fs::write(alpha.join("SKILL.md"), "---\nname: alpha\n---\n").unwrap();
+        std::fs::write(nested.join("SKILL.md"), "---\nname: nested\n---\n").unwrap();
+        std::fs::write(beta.join("SKILL.md"), "---\nname: beta\n---\n").unwrap();
+
+        let dirs = discover_skill_dirs(tmp.path()).unwrap();
+        let names: Vec<_> = dirs
+            .iter()
+            .map(|path| path.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+
+        assert_eq!(names, vec!["alpha".to_string(), "beta".to_string()]);
     }
 }
