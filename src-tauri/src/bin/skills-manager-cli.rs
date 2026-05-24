@@ -132,6 +132,15 @@ enum EnvCommand {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Adopt existing skills from installed agent skill directories.
+    Adopt {
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long = "path", value_name = "PATH")]
+        paths: Vec<PathBuf>,
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Export an agent-readable bootstrap SKILL.md for restoring this environment.
     ExportBootstrapSkill {
         #[arg(long)]
@@ -607,6 +616,19 @@ struct AdoptReport {
 }
 
 #[derive(Debug, Serialize)]
+struct EnvAdoptReport {
+    ok: bool,
+    dry_run: bool,
+    profile_id: Option<String>,
+    profile_name: Option<String>,
+    paths: Vec<String>,
+    adopted: Vec<InstallReport>,
+    candidates: Vec<AdoptCandidate>,
+    skipped: Vec<AdoptCandidate>,
+    added_to_profile: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
 struct TagReport {
     skill_id: String,
     name: String,
@@ -796,6 +818,14 @@ fn run_env(args: EnvArgs, store: &SkillStore, json: bool) -> anyhow::Result<()> 
             let report = run_env_apply(store, profile.as_deref(), dry_run)?;
             print_json(&report, json);
         }
+        EnvCommand::Adopt {
+            profile,
+            paths,
+            dry_run,
+        } => {
+            let report = run_env_adopt(store, profile.as_deref(), &paths, dry_run)?;
+            print_json(&report, json);
+        }
         EnvCommand::ExportBootstrapSkill {
             profile,
             dest,
@@ -852,6 +882,65 @@ fn run_env_apply(
         targets,
         applied: !dry_run,
     })
+}
+
+fn run_env_adopt(
+    store: &SkillStore,
+    profile_ref: Option<&str>,
+    paths: &[PathBuf],
+    dry_run: bool,
+) -> anyhow::Result<EnvAdoptReport> {
+    let profile = profile_ref
+        .map(|reference| resolve_scenario(store, reference))
+        .transpose()?;
+    let scan_paths = if paths.is_empty() {
+        default_env_adopt_paths(store)
+    } else {
+        paths.to_vec()
+    };
+    if scan_paths.is_empty() {
+        bail!("no installed agent skill directories found; pass --path <dir>");
+    }
+
+    let report = run_adopt(store, &scan_paths, None, None, dry_run)?;
+    let mut added_to_profile = Vec::new();
+    if !dry_run {
+        if let Some(profile) = profile.as_ref() {
+            for item in &report.adopted {
+                store.add_skill_to_scenario(&profile.id, &item.skill_id)?;
+                added_to_profile.push(item.skill_id.clone());
+            }
+            sync_metadata::write_all_from_db(store)?;
+            refresh_agentport_environment_if_present(store)?;
+        }
+    }
+
+    Ok(EnvAdoptReport {
+        ok: report.ok,
+        dry_run,
+        profile_id: profile.as_ref().map(|profile| profile.id.clone()),
+        profile_name: profile.as_ref().map(|profile| profile.name.clone()),
+        paths: scan_paths
+            .iter()
+            .map(|path| path.to_string_lossy().to_string())
+            .collect(),
+        adopted: report.adopted,
+        candidates: report.candidates,
+        skipped: report.skipped,
+        added_to_profile,
+    })
+}
+
+fn default_env_adopt_paths(store: &SkillStore) -> Vec<PathBuf> {
+    let mut paths: Vec<PathBuf> = tool_service::list_tool_info(store)
+        .into_iter()
+        .filter(|tool| tool.installed && !tool.skills_dir.trim().is_empty())
+        .map(|tool| PathBuf::from(tool.skills_dir))
+        .filter(|path| path.is_dir())
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths
 }
 
 fn run_package_install(
@@ -2591,6 +2680,7 @@ fn run_adopt(
             preset_id: None,
         });
     }
+    refresh_agentport_environment_if_present(store)?;
 
     Ok(AdoptReport {
         ok: true,
