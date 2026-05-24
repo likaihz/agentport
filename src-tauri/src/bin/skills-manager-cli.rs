@@ -9,7 +9,7 @@ use app_lib::core::{
     installer, repo_lock::RepoLock, scenario_service, skill_metadata, skill_store::SkillStore,
     skillssh_api, sync_engine, sync_metadata, tool_service,
 };
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 
 #[derive(Parser, Debug)]
@@ -184,6 +184,24 @@ enum SkillsCommand {
         /// Add to given preset (by id or name) and sync agents
         #[arg(long, alias = "sync-scenario", value_name = "REF")]
         sync_preset: Option<String>,
+    },
+    Import {
+        path: PathBuf,
+        #[arg(long, value_enum, default_value = "vendored")]
+        mode: LocalImportMode,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    Link {
+        path: PathBuf,
+        #[arg(long)]
+        origin: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        dry_run: bool,
     },
     Update {
         /// Skill ref (id / name / dir basename / central path). Omit for --all.
@@ -452,6 +470,16 @@ struct SkillCreateReport {
 }
 
 #[derive(Debug, Serialize)]
+struct SkillLocalReport {
+    ok: bool,
+    dry_run: bool,
+    mode: String,
+    origin_id: Option<String>,
+    candidate: PackageSkillCandidate,
+    installed: Option<InstallReport>,
+}
+
+#[derive(Debug, Serialize)]
 struct PackageInstallReport {
     ok: bool,
     reference: String,
@@ -604,6 +632,11 @@ enum SyncTarget {
     None,
     Active,
     Specific(String),
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum LocalImportMode {
+    Vendored,
 }
 
 fn main() {
@@ -1325,6 +1358,24 @@ fn run_skills(args: SkillsArgs, store: &SkillStore, json: bool) -> anyhow::Resul
             let report = run_install(store, &reference, name.as_deref(), kind, sync_target)?;
             print_json(&report, json);
         }
+        SkillsCommand::Import {
+            path,
+            mode,
+            name,
+            dry_run,
+        } => {
+            let report = run_import_skill(store, &path, mode, name.as_deref(), dry_run)?;
+            print_json(&report, json);
+        }
+        SkillsCommand::Link {
+            path,
+            origin,
+            name,
+            dry_run,
+        } => {
+            let report = run_link_skill(store, &path, &origin, name.as_deref(), dry_run)?;
+            print_json(&report, json);
+        }
         SkillsCommand::Update { reference, all } => {
             let reports = run_update(store, reference.as_deref(), all)?;
             print_json(&reports, json);
@@ -1545,6 +1596,7 @@ fn run_create_skill(
     };
     let skill_id = cmd::store_installed_skill_unlocked(store, &result, &metadata, None)
         .map_err(map_app_err)?;
+    refresh_agentport_environment_if_present(store)?;
 
     Ok(SkillCreateReport {
         ok: true,
@@ -1554,9 +1606,142 @@ fn run_create_skill(
     })
 }
 
+fn run_import_skill(
+    store: &SkillStore,
+    path: &Path,
+    mode: LocalImportMode,
+    name: Option<&str>,
+    dry_run: bool,
+) -> anyhow::Result<SkillLocalReport> {
+    match mode {
+        LocalImportMode::Vendored => run_local_skill_install(
+            store,
+            path,
+            name,
+            "local_vendored",
+            "vendored",
+            None,
+            None,
+            dry_run,
+        ),
+    }
+}
+
+fn run_link_skill(
+    store: &SkillStore,
+    path: &Path,
+    origin: &str,
+    name: Option<&str>,
+    dry_run: bool,
+) -> anyhow::Result<SkillLocalReport> {
+    let path = validate_local_skill_path(path)?;
+    let origin_id = validate_origin_id(origin)?;
+    let resolved = path.canonicalize().unwrap_or_else(|_| path.clone());
+    run_local_skill_install(
+        store,
+        &path,
+        name,
+        "local_linked",
+        "linked",
+        Some(origin_id),
+        Some(resolved.to_string_lossy().to_string()),
+        dry_run,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_local_skill_install(
+    store: &SkillStore,
+    path: &Path,
+    name: Option<&str>,
+    source_type: &str,
+    mode: &str,
+    source_ref: Option<String>,
+    source_ref_resolved: Option<String>,
+    dry_run: bool,
+) -> anyhow::Result<SkillLocalReport> {
+    let path = validate_local_skill_path(path)?;
+    let candidate_name = name
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| skill_metadata::infer_skill_name(&path));
+    let candidate = PackageSkillCandidate {
+        name: candidate_name,
+        path: path.to_string_lossy().to_string(),
+        subpath: None,
+    };
+    if dry_run {
+        return Ok(SkillLocalReport {
+            ok: true,
+            dry_run,
+            mode: mode.to_string(),
+            origin_id: source_ref,
+            candidate,
+            installed: None,
+        });
+    }
+
+    let _lock = RepoLock::acquire("cli import local skill")?;
+    let result = installer::install_from_local(&path, name)?;
+    let metadata = cmd::InstallSourceMetadata {
+        source_type: source_type.to_string(),
+        source_ref: source_ref.clone(),
+        source_ref_resolved,
+        source_subpath: None,
+        source_branch: None,
+        source_revision: None,
+        remote_revision: None,
+        update_status: "local_only".to_string(),
+    };
+    let central_path = result.central_path.to_string_lossy().to_string();
+    let install_name = result.name.clone();
+    let skill_id = cmd::store_installed_skill_unlocked(store, &result, &metadata, None)
+        .map_err(map_app_err)?;
+    refresh_agentport_environment_if_present(store)?;
+
+    Ok(SkillLocalReport {
+        ok: true,
+        dry_run,
+        mode: mode.to_string(),
+        origin_id: source_ref,
+        candidate,
+        installed: Some(InstallReport {
+            ok: true,
+            skill_id,
+            name: install_name,
+            central_path,
+            source_type: source_type.to_string(),
+            synced: false,
+            preset_id: None,
+        }),
+    })
+}
+
+fn validate_local_skill_path(path: &Path) -> anyhow::Result<PathBuf> {
+    let path = expand_path(&path.to_string_lossy())?;
+    if !path.exists() {
+        bail!("local skill path does not exist: {}", path.display());
+    }
+    if !skill_metadata::is_valid_skill_dir(&path) {
+        bail!("local skill path is not a valid skill: {}", path.display());
+    }
+    Ok(path)
+}
+
+fn validate_origin_id(origin: &str) -> anyhow::Result<String> {
+    let origin = origin.trim();
+    if origin.is_empty() {
+        bail!("--origin cannot be empty");
+    }
+    if Path::new(origin).is_absolute() {
+        bail!("--origin must be a stable id, not an absolute path");
+    }
+    Ok(origin.to_string())
+}
+
 fn run_sync_in(store: &SkillStore, reference: &str) -> anyhow::Result<SkillSyncInReport> {
     let skill = resolve_skill(store, reference)?;
     let refreshed = cmd::reimport_local_skill_internal(store, &skill.id).map_err(map_app_err)?;
+    refresh_agentport_environment_if_present(store)?;
     Ok(SkillSyncInReport {
         ok: true,
         skill_id: refreshed.id,
@@ -1596,7 +1781,8 @@ fn run_pull_target(
         &skill.update_status,
     )?;
     cmd::resync_copy_targets(store, &skill.id).map_err(map_app_err)?;
-    sync_metadata::write_all_from_db(store)?;
+    sync_metadata::write_all_from_db_unlocked(store)?;
+    refresh_agentport_environment_if_present(store)?;
 
     Ok(SkillTargetActionReport {
         ok: true,
@@ -1635,6 +1821,7 @@ fn run_discard_target(
         ..target
     };
     store.insert_target(&updated_target)?;
+    refresh_agentport_environment_if_present(store)?;
 
     Ok(SkillTargetActionReport {
         ok: true,

@@ -714,17 +714,20 @@ fn build_skills(store: &SkillStore) -> Result<Vec<EnvSkill>> {
 }
 
 fn env_source_for_skill(skill: &SkillRecord, local_source: bool) -> EnvSource {
+    let local_linked = skill.source_type == "local_linked";
     EnvSource {
         source_type: skill.source_type.clone(),
         mode: local_source.then(|| {
-            if skill.source_type == "local_created" {
-                "created".to_string()
-            } else {
-                "vendored".to_string()
+            match skill.source_type.as_str() {
+                "local_created" => "created".to_string(),
+                "local_linked" => "linked".to_string(),
+                _ => "vendored".to_string(),
             }
         }),
         confidence: "exact".to_string(),
-        reference: if local_source {
+        reference: if local_linked {
+            skill.source_ref.clone()
+        } else if local_source {
             None
         } else {
             skill.source_ref.clone()
@@ -767,10 +770,10 @@ fn artifact_source_for_skill(skill: &SkillRecord, package_id: Option<&str>) -> E
         let local = is_local_source_type(&skill.source_type);
         EnvArtifactSource {
             source_type: if local {
-                if skill.source_type == "local_created" {
-                    "local_created".to_string()
-                } else {
-                    "local_vendored".to_string()
+                match skill.source_type.as_str() {
+                    "local_created" => "local_created".to_string(),
+                    "local_linked" => "local_linked".to_string(),
+                    _ => "local_vendored".to_string(),
                 }
             } else {
                 skill.source_type.clone()
@@ -820,7 +823,12 @@ fn package_source_for_skill(skill: &SkillRecord) -> EnvPackageSource {
 fn is_local_source_type(source_type: &str) -> bool {
     matches!(
         source_type,
-        "local" | "import" | "local_created" | "local_vendored" | "local_package"
+        "local"
+            | "import"
+            | "local_created"
+            | "local_linked"
+            | "local_vendored"
+            | "local_package"
     )
 }
 
@@ -1041,6 +1049,22 @@ mod tests {
 
         assert_eq!(source.mode.as_deref(), Some("created"));
         assert_eq!(artifact_source.source_type, "local_created");
+        assert!(package_id_for_skill_record(&skill).is_none());
+    }
+
+    #[test]
+    fn local_linked_skill_keeps_origin_id_and_redacts_path() {
+        let mut skill = skill("local_linked");
+        skill.source_ref = Some("personal-skills/review".to_string());
+        skill.source_ref_resolved = Some("/Users/example/dev/review".to_string());
+        let source = env_source_for_skill(&skill, true);
+        let artifact_source = artifact_source_for_skill(&skill, None);
+
+        assert_eq!(source.source_type, "local_linked");
+        assert_eq!(source.mode.as_deref(), Some("linked"));
+        assert_eq!(source.reference.as_deref(), Some("personal-skills/review"));
+        assert!(source.resolved_reference.is_none());
+        assert_eq!(artifact_source.source_type, "local_linked");
         assert!(package_id_for_skill_record(&skill).is_none());
     }
 

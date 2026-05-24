@@ -236,11 +236,12 @@ pub async fn get_source_skill_document(
             .map_err(AppError::db)?
             .ok_or_else(|| AppError::not_found("Skill not found"))?;
 
-        if matches!(skill.source_type.as_str(), "local" | "import") {
-            let source_path = skill.source_ref.as_ref().ok_or_else(|| {
-                AppError::not_found("Local skill is missing its original source path")
-            })?;
-            let source_dir = PathBuf::from(source_path);
+        if matches!(
+            skill.source_type.as_str(),
+            "local" | "import" | "local_linked"
+        ) {
+            let source_path = local_source_path_for_reimport(&skill)?;
+            let source_dir = PathBuf::from(&source_path);
             if !source_dir.exists() {
                 return Err(AppError::not_found("Original source path no longer exists"));
             }
@@ -336,6 +337,9 @@ fn source_label_for_skill(skill: &SkillRecord) -> String {
         "git" => "Git".to_string(),
         "local" => "Local".to_string(),
         "import" => "Imported".to_string(),
+        "local_linked" => "Linked local".to_string(),
+        "local_vendored" => "Vendored local".to_string(),
+        "local_created" => "Created local".to_string(),
         other => other.to_string(),
     }
 }
@@ -1374,16 +1378,16 @@ pub fn reimport_local_skill_internal(
         .map_err(AppError::db)?
         .ok_or_else(|| AppError::not_found("Skill not found"))?;
 
-    if !matches!(skill.source_type.as_str(), "local" | "import") {
+    if !matches!(
+        skill.source_type.as_str(),
+        "local" | "import" | "local_linked"
+    ) {
         return Err(AppError::invalid_input(
-            "Only local skills can be reimported",
+            "Only local skills with a source path can be reimported",
         ));
     }
 
-    let source_path = skill
-        .source_ref
-        .clone()
-        .ok_or_else(|| AppError::not_found("Local skill is missing its original source path"))?;
+    let source_path = local_source_path_for_reimport(&skill)?;
     let path = PathBuf::from(&source_path);
     if !path.exists() {
         store
@@ -1431,6 +1435,18 @@ pub fn reimport_local_skill_internal(
             let _ = store.update_skill_check_state(skill_id, None, "error", Some(&e.message));
             Err(e)
         }
+    }
+}
+
+fn local_source_path_for_reimport(skill: &SkillRecord) -> Result<String, AppError> {
+    match skill.source_type.as_str() {
+        "local_linked" => skill.source_ref_resolved.clone().ok_or_else(|| {
+            AppError::not_found("Linked local skill is missing its machine-local source path")
+        }),
+        _ => skill
+            .source_ref
+            .clone()
+            .ok_or_else(|| AppError::not_found("Local skill is missing its original source path")),
     }
 }
 

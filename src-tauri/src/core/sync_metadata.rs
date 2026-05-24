@@ -165,7 +165,7 @@ pub(crate) fn reindex_from_metadata_unlocked(store: &SkillStore) -> Result<()> {
             .filter(|s| !s.trim().is_empty())
             .unwrap_or(inferred_name);
         let previous = existing_by_id.get(&meta.skill_id);
-        let source_ref = if matches!(meta.source.source_type.as_str(), "import" | "local") {
+        let source_ref = if has_private_source_ref(&meta.source.source_type) {
             previous.and_then(|s| s.source_ref.clone())
         } else {
             meta.source.ref_.clone()
@@ -379,9 +379,10 @@ fn remove_stale_json_files(dir: &Path, expected_stems: &HashSet<String>) -> Resu
 fn write_skill_file(skill: &SkillRecord, tags: &[String]) -> Result<()> {
     let path = relative_skill_path(&skill.central_path)?;
     let tags = sorted_tags(tags);
-    let source_ref = match skill.source_type.as_str() {
-        "import" | "local" => None,
-        _ => skill.source_ref.clone(),
+    let source_ref = if has_private_source_ref(&skill.source_type) {
+        None
+    } else {
+        skill.source_ref.clone()
     };
     let meta = SkillMetaFile {
         schema_version: SCHEMA_VERSION,
@@ -402,6 +403,13 @@ fn write_skill_file(skill: &SkillRecord, tags: &[String]) -> Result<()> {
             .join("skills")
             .join(format!("{}.json", skill.id)),
         &meta,
+    )
+}
+
+fn has_private_source_ref(source_type: &str) -> bool {
+    matches!(
+        source_type,
+        "import" | "local" | "local_package" | "local_vendored"
     )
 }
 
