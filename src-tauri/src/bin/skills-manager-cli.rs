@@ -5,9 +5,9 @@ use std::sync::Arc;
 use anyhow::{anyhow, bail};
 use app_lib::commands::skills as cmd;
 use app_lib::core::{
-    agentport_env, app_state, central_repo, error::AppError, git_backup, git_fetcher, installer,
-    repo_lock::RepoLock, scenario_service, skill_metadata, skill_store::SkillStore, skillssh_api,
-    sync_engine, sync_metadata, tool_service,
+    agentport_env, app_state, central_repo, content_hash, error::AppError, git_backup, git_fetcher,
+    installer, repo_lock::RepoLock, scenario_service, skill_metadata, skill_store::SkillStore,
+    skillssh_api, sync_engine, sync_metadata, tool_service,
 };
 use clap::{Args, Parser, Subcommand};
 use serde::Serialize;
@@ -115,6 +115,11 @@ struct SkillsArgs {
 #[derive(Subcommand, Debug)]
 enum SkillsCommand {
     List,
+    Create {
+        name: String,
+        #[arg(long)]
+        description: Option<String>,
+    },
     Show {
         reference: String,
     },
@@ -197,6 +202,19 @@ enum SkillsCommand {
         git_subpath: Option<String>,
         #[arg(long)]
         dry_run: bool,
+    },
+    SyncIn {
+        reference: String,
+    },
+    PullTarget {
+        reference: String,
+        #[arg(long)]
+        tool: String,
+    },
+    DiscardTarget {
+        reference: String,
+        #[arg(long)]
+        tool: String,
     },
     Tag(TagArgs),
 }
@@ -384,6 +402,33 @@ struct SyncReport {
     tool: Option<String>,
     dry_run: bool,
     targets: Vec<scenario_service::SyncPreviewTarget>,
+}
+
+#[derive(Debug, Serialize)]
+struct SkillCreateReport {
+    ok: bool,
+    skill_id: String,
+    name: String,
+    central_path: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SkillSyncInReport {
+    ok: bool,
+    skill_id: String,
+    name: String,
+    central_path: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SkillTargetActionReport {
+    ok: bool,
+    action: String,
+    skill_id: String,
+    name: String,
+    tool: String,
+    target_path: String,
+    mode: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -652,6 +697,10 @@ fn run_env_apply(
 fn run_skills(args: SkillsArgs, store: &SkillStore, json: bool) -> anyhow::Result<()> {
     match args.command {
         SkillsCommand::List => print_json(&list_skills(store)?, json),
+        SkillsCommand::Create { name, description } => {
+            let report = run_create_skill(store, &name, description.as_deref())?;
+            print_json(&report, json);
+        }
         SkillsCommand::Show { reference } => print_json(&show_skill(store, &reference)?, json),
         SkillsCommand::Export { reference, dest } => {
             let result = export_skill(store, &reference, &dest)?;
@@ -733,6 +782,18 @@ fn run_skills(args: SkillsArgs, store: &SkillStore, json: bool) -> anyhow::Resul
                 git_subpath.as_deref(),
                 dry_run,
             )?;
+            print_json(&report, json);
+        }
+        SkillsCommand::SyncIn { reference } => {
+            let report = run_sync_in(store, &reference)?;
+            print_json(&report, json);
+        }
+        SkillsCommand::PullTarget { reference, tool } => {
+            let report = run_pull_target(store, &reference, &tool)?;
+            print_json(&report, json);
+        }
+        SkillsCommand::DiscardTarget { reference, tool } => {
+            let report = run_discard_target(store, &reference, &tool)?;
             print_json(&report, json);
         }
         SkillsCommand::Tag(args) => run_tag(args, store, json)?,
@@ -845,6 +906,166 @@ fn collect_files_inner(root: &Path, current: &Path, out: &mut Vec<String>) -> an
         }
     }
     Ok(())
+}
+
+// ── local skill authoring ─────────────────────────────────────────────────
+
+fn run_create_skill(
+    store: &SkillStore,
+    name: &str,
+    description: Option<&str>,
+) -> anyhow::Result<SkillCreateReport> {
+    let sanitized = skill_metadata::sanitize_skill_name(name)
+        .ok_or_else(|| anyhow!("invalid skill name: {name}"))?;
+    let destination = central_repo::skills_dir().join(&sanitized);
+    if destination.exists() {
+        bail!("skill already exists at {}", destination.display());
+    }
+
+    let _lock = RepoLock::acquire("cli create local skill")?;
+    std::fs::create_dir_all(&destination)?;
+    let description = description.unwrap_or("User-authored AgentPort skill");
+    let markdown = format!(
+        "---\nname: {sanitized}\ndescription: {description}\n---\n\n# {sanitized}\n\n"
+    );
+    std::fs::write(destination.join("SKILL.md"), markdown)?;
+
+    let content_hash = content_hash::hash_directory(&destination)?;
+    let result = installer::InstallResult {
+        name: sanitized,
+        description: Some(description.to_string()),
+        central_path: destination,
+        content_hash,
+    };
+    let metadata = cmd::InstallSourceMetadata {
+        source_type: "local_created".to_string(),
+        source_ref: None,
+        source_ref_resolved: None,
+        source_subpath: None,
+        source_branch: None,
+        source_revision: None,
+        remote_revision: None,
+        update_status: "local_only".to_string(),
+    };
+    let skill_id = cmd::store_installed_skill_unlocked(store, &result, &metadata, None)
+        .map_err(map_app_err)?;
+
+    Ok(SkillCreateReport {
+        ok: true,
+        skill_id,
+        name: result.name,
+        central_path: result.central_path.to_string_lossy().to_string(),
+    })
+}
+
+fn run_sync_in(store: &SkillStore, reference: &str) -> anyhow::Result<SkillSyncInReport> {
+    let skill = resolve_skill(store, reference)?;
+    let refreshed = cmd::reimport_local_skill_internal(store, &skill.id).map_err(map_app_err)?;
+    Ok(SkillSyncInReport {
+        ok: true,
+        skill_id: refreshed.id,
+        name: refreshed.name,
+        central_path: refreshed.central_path,
+    })
+}
+
+fn run_pull_target(
+    store: &SkillStore,
+    reference: &str,
+    tool: &str,
+) -> anyhow::Result<SkillTargetActionReport> {
+    let skill = resolve_skill(store, reference)?;
+    let target = resolve_skill_target(store, &skill.id, tool)?;
+    if target.mode != "copy" {
+        bail!("pull-target only applies to copy targets; {} is {}", tool, target.mode);
+    }
+
+    let target_path = PathBuf::from(&target.target_path);
+    if !target_path.is_dir() {
+        bail!("target path does not exist: {}", target_path.display());
+    }
+
+    let _lock = RepoLock::acquire("cli pull target skill")?;
+    let staged_path = cmd::staged_path_for(&skill.central_path);
+    let install_result =
+        installer::install_from_local_to_destination(&target_path, Some(&skill.name), &staged_path)?;
+    cmd::swap_skill_directory(&staged_path, Path::new(&skill.central_path)).map_err(map_app_err)?;
+    store.update_skill_after_install(
+        &skill.id,
+        &skill.name,
+        install_result.description.as_deref(),
+        skill.source_revision.as_deref(),
+        skill.remote_revision.as_deref(),
+        Some(&install_result.content_hash),
+        &skill.update_status,
+    )?;
+    cmd::resync_copy_targets(store, &skill.id).map_err(map_app_err)?;
+    sync_metadata::write_all_from_db(store)?;
+
+    Ok(SkillTargetActionReport {
+        ok: true,
+        action: "pull-target".to_string(),
+        skill_id: skill.id,
+        name: skill.name,
+        tool: tool.to_string(),
+        target_path: target.target_path,
+        mode: target.mode,
+    })
+}
+
+fn run_discard_target(
+    store: &SkillStore,
+    reference: &str,
+    tool: &str,
+) -> anyhow::Result<SkillTargetActionReport> {
+    let skill = resolve_skill(store, reference)?;
+    let target = resolve_skill_target(store, &skill.id, tool)?;
+    let source = PathBuf::from(&skill.central_path);
+    let target_path = PathBuf::from(&target.target_path);
+    let desired_mode = if target.mode == "copy" {
+        sync_engine::SyncMode::Copy
+    } else {
+        sync_engine::SyncMode::Symlink
+    };
+
+    let _lock = RepoLock::acquire("cli discard target skill")?;
+    let actual_mode = sync_engine::sync_skill(&source, &target_path, desired_mode)?;
+    let updated_target = app_lib::core::skill_store::SkillTargetRecord {
+        mode: actual_mode.as_str().to_string(),
+        status: "ok".to_string(),
+        synced_at: Some(chrono::Utc::now().timestamp_millis()),
+        last_error: None,
+        source_hash: skill.content_hash.clone(),
+        ..target
+    };
+    store.insert_target(&updated_target)?;
+
+    Ok(SkillTargetActionReport {
+        ok: true,
+        action: "discard-target".to_string(),
+        skill_id: skill.id,
+        name: skill.name,
+        tool: tool.to_string(),
+        target_path: updated_target.target_path,
+        mode: updated_target.mode,
+    })
+}
+
+fn resolve_skill_target(
+    store: &SkillStore,
+    skill_id: &str,
+    tool: &str,
+) -> anyhow::Result<app_lib::core::skill_store::SkillTargetRecord> {
+    let matches: Vec<_> = store
+        .get_targets_for_skill(skill_id)?
+        .into_iter()
+        .filter(|target| target.tool == tool)
+        .collect();
+    match matches.len() {
+        1 => Ok(matches.into_iter().next().unwrap()),
+        0 => Err(anyhow!("no synced target for tool: {tool}")),
+        _ => Err(anyhow!("multiple targets for tool: {tool}")),
+    }
 }
 
 // ── install ───────────────────────────────────────────────────────────────

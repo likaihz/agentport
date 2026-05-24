@@ -584,7 +584,7 @@ fn build_skills(store: &SkillStore) -> Result<Vec<EnvSkill>> {
         .into_iter()
         .map(|skill| {
             let tags = tags_map.get(&skill.id).cloned().unwrap_or_default();
-            let local_source = matches!(skill.source_type.as_str(), "local" | "import");
+            let local_source = is_local_source_type(&skill.source_type);
             let source = env_source_for_skill(&skill, local_source);
             EnvSkill {
                 id: skill.id,
@@ -608,7 +608,13 @@ fn build_skills(store: &SkillStore) -> Result<Vec<EnvSkill>> {
 fn env_source_for_skill(skill: &SkillRecord, local_source: bool) -> EnvSource {
     EnvSource {
         source_type: skill.source_type.clone(),
-        mode: local_source.then(|| "vendored".to_string()),
+        mode: local_source.then(|| {
+            if skill.source_type == "local_created" {
+                "created".to_string()
+            } else {
+                "vendored".to_string()
+            }
+        }),
         confidence: "exact".to_string(),
         reference: if local_source {
             None
@@ -650,10 +656,14 @@ fn artifact_source_for_skill(skill: &SkillRecord, package_id: Option<&str>) -> E
             revision: skill.source_revision.clone(),
         }
     } else {
-        let local = matches!(skill.source_type.as_str(), "local" | "import");
+        let local = is_local_source_type(&skill.source_type);
         EnvArtifactSource {
             source_type: if local {
-                "local_vendored".to_string()
+                if skill.source_type == "local_created" {
+                    "local_created".to_string()
+                } else {
+                    "local_vendored".to_string()
+                }
             } else {
                 skill.source_type.clone()
             },
@@ -674,7 +684,7 @@ fn package_id_for_skill(skill: &SkillRecord) -> Option<String> {
 }
 
 fn package_source_for_skill(skill: &SkillRecord) -> EnvPackageSource {
-    let local = matches!(skill.source_type.as_str(), "local" | "import");
+    let local = is_local_source_type(&skill.source_type);
     EnvPackageSource {
         source_type: skill.source_type.clone(),
         confidence: "exact".to_string(),
@@ -692,6 +702,10 @@ fn package_source_for_skill(skill: &SkillRecord) -> EnvPackageSource {
         revision: skill.source_revision.clone(),
         remote_revision: skill.remote_revision.clone(),
     }
+}
+
+fn is_local_source_type(source_type: &str) -> bool {
+    matches!(source_type, "local" | "import" | "local_created")
 }
 
 fn source_identity(skill: &SkillRecord) -> Option<String> {
@@ -843,6 +857,17 @@ mod tests {
         let artifact_source = artifact_source_for_skill(&skill, None);
         assert_eq!(artifact_source.source_type, "local_vendored");
         assert!(artifact_source.package.is_none());
+    }
+
+    #[test]
+    fn local_created_skill_uses_created_mode() {
+        let skill = skill("local_created");
+        let source = env_source_for_skill(&skill, true);
+        let artifact_source = artifact_source_for_skill(&skill, None);
+
+        assert_eq!(source.mode.as_deref(), Some("created"));
+        assert_eq!(artifact_source.source_type, "local_created");
+        assert!(package_id_for_skill(&skill).is_none());
     }
 
     #[test]
