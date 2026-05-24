@@ -235,8 +235,19 @@ pub struct EnvDiffReport {
     pub profile: Option<EnvProfileRef>,
     pub missing_skills: Vec<String>,
     pub unmanaged_skills: Vec<String>,
+    pub missing_artifacts: Vec<String>,
+    pub unmanaged_artifacts: Vec<String>,
+    pub changed_artifacts: Vec<EnvArtifactDrift>,
     pub missing_profile: bool,
     pub ok: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EnvArtifactDrift {
+    pub id: String,
+    pub kind: String,
+    pub expected_hash: Option<String>,
+    pub current_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -390,6 +401,13 @@ pub fn read_manifest() -> Result<EnvManifest> {
     serde_yaml::from_str(&raw).with_context(|| format!("failed to parse {}", path.display()))
 }
 
+pub fn read_lock() -> Result<EnvLock> {
+    let path = lock_path();
+    let raw =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    serde_yaml::from_str(&raw).with_context(|| format!("failed to parse {}", path.display()))
+}
+
 pub fn diff_current_environment(
     store: &SkillStore,
     profile_ref: Option<&str>,
@@ -406,6 +424,15 @@ pub fn diff_current_environment(
         .into_iter()
         .map(|skill| skill.id)
         .collect();
+    let manifest_artifact_ids: BTreeSet<String> = manifest
+        .artifacts
+        .iter()
+        .map(|artifact| artifact.id.clone())
+        .collect();
+    let current_artifact_ids: BTreeSet<String> = build_artifacts(store)?
+        .into_iter()
+        .map(|artifact| artifact.id)
+        .collect();
 
     let expected_skill_ids: BTreeSet<String> = profile
         .as_ref()
@@ -420,6 +447,19 @@ pub fn diff_current_environment(
         .difference(&manifest_skill_ids)
         .cloned()
         .collect::<Vec<_>>();
+    let missing_artifacts = manifest_artifact_ids
+        .difference(&current_artifact_ids)
+        .cloned()
+        .collect::<Vec<_>>();
+    let unmanaged_artifacts = current_artifact_ids
+        .difference(&manifest_artifact_ids)
+        .cloned()
+        .collect::<Vec<_>>();
+    let changed_artifacts = if lock_path().exists() {
+        changed_artifacts_from_locks(&read_lock()?, &build_lock_from_store(store)?)
+    } else {
+        Vec::new()
+    };
     let missing_profile = profile_ref.is_some() && profile.is_none();
 
     Ok(EnvDiffReport {
@@ -428,9 +468,17 @@ pub fn diff_current_environment(
             id: profile.id.clone(),
             name: profile.name.clone(),
         }),
-        ok: missing_skills.is_empty() && unmanaged_skills.is_empty() && !missing_profile,
+        ok: missing_skills.is_empty()
+            && unmanaged_skills.is_empty()
+            && missing_artifacts.is_empty()
+            && unmanaged_artifacts.is_empty()
+            && changed_artifacts.is_empty()
+            && !missing_profile,
         missing_skills,
         unmanaged_skills,
+        missing_artifacts,
+        unmanaged_artifacts,
+        changed_artifacts,
         missing_profile,
     })
 }
@@ -789,6 +837,31 @@ fn source_identity(skill: &SkillRecord) -> Option<String> {
         })
 }
 
+fn changed_artifacts_from_locks(expected: &EnvLock, current: &EnvLock) -> Vec<EnvArtifactDrift> {
+    let current_by_id: BTreeMap<&str, &EnvLockedArtifact> = current
+        .artifacts
+        .iter()
+        .map(|artifact| (artifact.id.as_str(), artifact))
+        .collect();
+    let mut changed = Vec::new();
+
+    for expected_artifact in &expected.artifacts {
+        let Some(current_artifact) = current_by_id.get(expected_artifact.id.as_str()) else {
+            continue;
+        };
+        if expected_artifact.content_hash != current_artifact.content_hash {
+            changed.push(EnvArtifactDrift {
+                id: expected_artifact.id.clone(),
+                kind: expected_artifact.kind.clone(),
+                expected_hash: expected_artifact.content_hash.clone(),
+                current_hash: current_artifact.content_hash.clone(),
+            });
+        }
+    }
+
+    changed
+}
+
 fn build_profiles(store: &SkillStore, active_id: Option<&str>) -> Result<Vec<EnvProfile>> {
     let mut scenarios = store.get_all_scenarios()?;
     scenarios.sort_by(compare_scenarios);
@@ -1013,5 +1086,38 @@ mod tests {
             .collect();
 
         assert_eq!(names, vec!["alpha".to_string(), "beta".to_string()]);
+    }
+
+    #[test]
+    fn changed_artifacts_from_locks_reports_hash_drift() {
+        let expected = EnvLock {
+            version: 1,
+            generated_at: "now".to_string(),
+            created_by: "test".to_string(),
+            packages: Vec::new(),
+            artifacts: vec![EnvLockedArtifact {
+                id: "skill:review".to_string(),
+                kind: "skill".to_string(),
+                owner_package: None,
+                content_hash: Some("old".to_string()),
+            }],
+            skills: Vec::new(),
+        };
+        let current = EnvLock {
+            artifacts: vec![EnvLockedArtifact {
+                id: "skill:review".to_string(),
+                kind: "skill".to_string(),
+                owner_package: None,
+                content_hash: Some("new".to_string()),
+            }],
+            ..expected.clone()
+        };
+
+        let changed = changed_artifacts_from_locks(&expected, &current);
+
+        assert_eq!(changed.len(), 1);
+        assert_eq!(changed[0].id, "skill:review");
+        assert_eq!(changed[0].expected_hash.as_deref(), Some("old"));
+        assert_eq!(changed[0].current_hash.as_deref(), Some("new"));
     }
 }
