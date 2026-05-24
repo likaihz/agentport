@@ -32,8 +32,9 @@ dist-ssr
 *.sw?
 
 .claude
-docs
+docs/*
+!docs/
+!docs/agentport-design.zh-CN.md
 reference
 CLAUDE.md
 .loop-log
-
