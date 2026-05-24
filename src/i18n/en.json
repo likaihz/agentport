@@ -8,6 +8,7 @@
     "globalWorkspace": "Global Workspace",
     "lobsterAgents": "Lobster Agents",
     "installSkills": "Install Skills",
+    "agentport": "AgentPort",
     "presets": "Presets",
     "newPreset": "New Preset",
     "projects": "Project Workspaces",
@@ -78,6 +79,80 @@
     "scanImport": "Scan & Import Local Skills",
     "installNew": "Install New Skills",
     "recentActivity": "Recent Activity"
+  },
+  "agentport": {
+    "title": "AgentPort",
+    "subtitle": "Portable environment state for coding agents, plugins, skills, and agent resources.",
+    "loading": "Loading",
+    "ready": "Ready",
+    "needsInit": "Needs init",
+    "needsReview": "Needs review",
+    "notAvailable": "Not available",
+    "stats": {
+      "skills": "Skills",
+      "packages": "Packages",
+      "artifacts": "Artifacts",
+      "agents": "Agents"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "init": "Initialize",
+      "rebuild": "Rebuild Metadata",
+      "planExport": "Plan Resource Export",
+      "export": "Export Resources",
+      "planApply": "Plan Apply",
+      "apply": "Apply Profile"
+    },
+    "sections": {
+      "repository": "Repository",
+      "review": "Review",
+      "resourceReport": "Resource Report",
+      "applyReport": "Apply Report"
+    },
+    "fields": {
+      "manifest": "Manifest",
+      "lock": "Lock",
+      "profile": "Profile",
+      "profileFallback": "Default profile",
+      "drift": "Drift",
+      "lastWrite": "Last write",
+      "diffError": "Diff error",
+      "warning": "Warning"
+    },
+    "diff": {
+      "missingSkills": "Missing skill",
+      "unmanagedSkills": "Unmanaged skill",
+      "missingArtifacts": "Missing artifact",
+      "unmanagedArtifacts": "Unmanaged artifact",
+      "changedArtifacts": "Changed artifact",
+      "missingProfile": "Missing profile"
+    },
+    "report": {
+      "planned": "Planned",
+      "applied": "Applied",
+      "profile": "Profile targets",
+      "missingSkill": "Missing skill",
+      "resources": "Resources",
+      "noItems": "No resource actions",
+      "more": "More",
+      "moreCount": "{{count}} more item(s)"
+    },
+    "diffSummary": "{{count}} issue(s)",
+    "writeSummary": "{{skills}} skills · {{artifacts}} artifacts",
+    "toasts": {
+      "initialized": "AgentPort metadata updated",
+      "exportPlanned": "Resource export plan ready",
+      "exported": "Resources exported",
+      "applyPlanned": "Apply plan ready",
+      "applied": "Profile applied",
+      "applyBlocked": "{{count}} missing skill(s)"
+    },
+    "errors": {
+      "refresh": "Failed to refresh AgentPort status",
+      "init": "Failed to initialize AgentPort",
+      "export": "Failed to export resources",
+      "apply": "Failed to apply profile"
+    }
   },
   "mySkills": {
     "title": "Library",

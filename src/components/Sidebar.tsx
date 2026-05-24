@@ -11,6 +11,7 @@ import {
   Pencil,
   Trash2,
   FolderOpen,
+  FileCode2,
   GripVertical,
   Link2,
   ChevronDown,
@@ -167,6 +168,7 @@ export function Sidebar() {
     { name: t("sidebar.dashboard"), path: "/", icon: LayoutDashboard },
     { name: t("sidebar.mySkills"), path: "/my-skills", icon: Layers },
     { name: t("sidebar.installSkills"), path: "/install", icon: Download },
+    { name: t("sidebar.agentport"), path: "/agentport", icon: FileCode2 },
   ];
 
   const handleSwitchPreset = (id: string) => {

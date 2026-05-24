@@ -445,6 +445,121 @@ export const clearLastPanic = () =>
 export const logStartupEvent = (label: string, elapsedMs: number) =>
   invoke<void>("log_startup_event", { label, elapsedMs: Math.round(elapsedMs) });
 
+// ── AgentPort Environment ──
+
+export interface AgentPortEnvWriteReport {
+  manifest_path: string;
+  lock_path: string;
+  package_count: number;
+  artifact_count: number;
+  skill_count: number;
+  profile_count: number;
+  tool_count: number;
+  overwritten: boolean;
+}
+
+export interface AgentPortEnvDoctorReport {
+  manifest_path: string;
+  lock_path: string;
+  manifest_exists: boolean;
+  lock_exists: boolean;
+  skills_dir_exists: boolean;
+  package_count: number;
+  artifact_count: number;
+  skill_count: number;
+  profile_count: number;
+  installed_tool_count: number;
+  warnings: string[];
+}
+
+export interface AgentPortEnvArtifactDrift {
+  id: string;
+  kind: string;
+  expected_hash: string | null;
+  current_hash: string | null;
+}
+
+export interface AgentPortEnvProfileRef {
+  id: string;
+  name: string;
+}
+
+export interface AgentPortEnvDiffReport {
+  manifest_path: string;
+  profile: AgentPortEnvProfileRef | null;
+  missing_skills: string[];
+  unmanaged_skills: string[];
+  missing_artifacts: string[];
+  unmanaged_artifacts: string[];
+  changed_artifacts: AgentPortEnvArtifactDrift[];
+  missing_profile: boolean;
+  ok: boolean;
+}
+
+export interface AgentPortEnvStatus {
+  doctor: AgentPortEnvDoctorReport;
+  diff: AgentPortEnvDiffReport | null;
+  diff_error: string | null;
+}
+
+export interface AgentPortEnvResourceActionItem {
+  id: string;
+  tool: string;
+  kind: string;
+  source_path: string;
+  target_path: string;
+  deploy: string;
+  status: string;
+  backup_path?: string | null;
+  error?: string | null;
+}
+
+export interface AgentPortEnvResourceActionReport {
+  ok: boolean;
+  dry_run: boolean;
+  items: AgentPortEnvResourceActionItem[];
+}
+
+export interface AgentPortEnvSyncTarget {
+  skill_id: string;
+  skill_name: string;
+  tool: string;
+  target_path: string;
+  mode: string;
+}
+
+export interface AgentPortEnvApplyReport {
+  ok: boolean;
+  profile_id: string;
+  profile_name: string;
+  dry_run: boolean;
+  missing_skills: string[];
+  targets: AgentPortEnvSyncTarget[];
+  resources: AgentPortEnvResourceActionItem[];
+  applied: boolean;
+}
+
+export const agentportEnvStatus = (profile?: string | null) =>
+  invoke<AgentPortEnvStatus>("agentport_env_status", { profile: profile ?? null });
+
+export const agentportEnvInit = (overwrite = true) =>
+  invoke<AgentPortEnvWriteReport>("agentport_env_init", { overwrite });
+
+export const agentportEnvExportResources = (overwrite = false, dryRun = true) =>
+  invoke<AgentPortEnvResourceActionReport>("agentport_env_export_resources", {
+    overwrite,
+    dryRun,
+  });
+
+export const agentportEnvApplyResources = (dryRun = true) =>
+  invoke<AgentPortEnvResourceActionReport>("agentport_env_apply_resources", { dryRun });
+
+export const agentportEnvApply = (profile?: string | null, dryRun = true) =>
+  invoke<AgentPortEnvApplyReport>("agentport_env_apply", {
+    profile: profile ?? null,
+    dryRun,
+  });
+
 // ── Git Backup ──
 
 export type GitUpstreamHealth =

@@ -8,6 +8,7 @@ import {
   Settings as SettingsIcon,
   FolderOpen,
   Folder,
+  FileCode2,
   Home,
   ArrowRight,
 } from "lucide-react";
@@ -171,6 +172,13 @@ export function CommandPalette() {
         label: t("commandPalette.scanImport"),
         icon: <FolderOpen className="h-3.5 w-3.5" />,
         run: () => navigate("/install?tab=local"),
+      },
+      {
+        id: "action:agentport",
+        kind: "action",
+        label: t("sidebar.agentport"),
+        icon: <FileCode2 className="h-3.5 w-3.5" />,
+        run: () => navigate("/agentport"),
       },
       {
         id: "action:settings",

@@ -8,6 +8,7 @@
     "globalWorkspace": "全域工作區",
     "lobsterAgents": "龍蝦 Agent",
     "installSkills": "安裝 Skills",
+    "agentport": "AgentPort",
     "presets": "Preset",
     "newPreset": "新增 Preset",
     "projects": "專案工作區",
@@ -78,6 +79,80 @@
     "scanImport": "掃描本機 Skills 匯入",
     "installNew": "安裝新 Skills",
     "recentActivity": "近期動態"
+  },
+  "agentport": {
+    "title": "AgentPort",
+    "subtitle": "用於同步 coding agent、插件、Skill 和資源設定的可遷移環境狀態。",
+    "loading": "載入中",
+    "ready": "已就緒",
+    "needsInit": "需要初始化",
+    "needsReview": "需要檢查",
+    "notAvailable": "不可用",
+    "stats": {
+      "skills": "Skills",
+      "packages": "Packages",
+      "artifacts": "Artifacts",
+      "agents": "Agents"
+    },
+    "actions": {
+      "refresh": "重新整理",
+      "init": "初始化",
+      "rebuild": "重建元資料",
+      "planExport": "預覽資源匯出",
+      "export": "匯出資源",
+      "planApply": "預覽套用",
+      "apply": "套用 Profile"
+    },
+    "sections": {
+      "repository": "倉庫",
+      "review": "檢查項",
+      "resourceReport": "資源報告",
+      "applyReport": "套用報告"
+    },
+    "fields": {
+      "manifest": "Manifest",
+      "lock": "Lock",
+      "profile": "Profile",
+      "profileFallback": "預設 Profile",
+      "drift": "漂移",
+      "lastWrite": "最近寫入",
+      "diffError": "Diff 錯誤",
+      "warning": "警告"
+    },
+    "diff": {
+      "missingSkills": "缺失 Skill",
+      "unmanagedSkills": "未納管 Skill",
+      "missingArtifacts": "缺失 Artifact",
+      "unmanagedArtifacts": "未納管 Artifact",
+      "changedArtifacts": "已變更 Artifact",
+      "missingProfile": "缺失 Profile"
+    },
+    "report": {
+      "planned": "預覽",
+      "applied": "已套用",
+      "profile": "Profile 目標",
+      "missingSkill": "缺失 Skill",
+      "resources": "資源",
+      "noItems": "沒有資源操作",
+      "more": "更多",
+      "moreCount": "還有 {{count}} 項"
+    },
+    "diffSummary": "{{count}} 個問題",
+    "writeSummary": "{{skills}} 個 Skills · {{artifacts}} 個 Artifacts",
+    "toasts": {
+      "initialized": "AgentPort 元資料已更新",
+      "exportPlanned": "資源匯出預覽已產生",
+      "exported": "資源已匯出",
+      "applyPlanned": "套用預覽已產生",
+      "applied": "Profile 已套用",
+      "applyBlocked": "{{count}} 個 Skill 缺失"
+    },
+    "errors": {
+      "refresh": "重新整理 AgentPort 狀態失敗",
+      "init": "初始化 AgentPort 失敗",
+      "export": "匯出資源失敗",
+      "apply": "套用 Profile 失敗"
+    }
   },
   "mySkills": {
     "title": "技能庫",

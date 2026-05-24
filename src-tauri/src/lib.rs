@@ -952,6 +952,12 @@ pub fn run() {
             commands::git_backup::git_backup_create_snapshot,
             commands::git_backup::git_backup_list_versions,
             commands::git_backup::git_backup_restore_version,
+            // AgentPort environment
+            commands::agentport_env::agentport_env_status,
+            commands::agentport_env::agentport_env_init,
+            commands::agentport_env::agentport_env_export_resources,
+            commands::agentport_env::agentport_env_apply_resources,
+            commands::agentport_env::agentport_env_apply,
             // Projects
             commands::projects::get_projects,
             commands::projects::add_project,
