@@ -299,6 +299,22 @@ pub fn lock_path() -> PathBuf {
     central_repo::skills_dir().join(LOCK_FILE)
 }
 
+pub fn machine_dir() -> PathBuf {
+    central_repo::skills_dir().join("machine")
+}
+
+pub fn machine_local_path() -> PathBuf {
+    machine_dir().join("machine.local.yaml")
+}
+
+pub fn secrets_local_path() -> PathBuf {
+    machine_dir().join("secrets.local.yaml")
+}
+
+pub fn machine_backups_dir() -> PathBuf {
+    machine_dir().join("backups")
+}
+
 pub fn build_manifest_from_store(store: &SkillStore) -> Result<EnvManifest> {
     let generated_at = Utc::now().to_rfc3339();
     let active_profile = store.get_active_scenario_id()?;
@@ -388,6 +404,7 @@ pub fn write_current_environment(store: &SkillStore, overwrite: bool) -> Result<
     if let Some(parent) = manifest_path.parent() {
         fs::create_dir_all(parent)?;
     }
+    ensure_machine_local_overlay()?;
 
     let manifest = build_manifest_from_store(store)?;
     let lock = build_lock_from_store(store)?;
@@ -404,6 +421,38 @@ pub fn write_current_environment(store: &SkillStore, overwrite: bool) -> Result<
         tool_count: manifest.tools.len(),
         overwritten: overwrite,
     })
+}
+
+fn ensure_machine_local_overlay() -> Result<()> {
+    fs::create_dir_all(machine_dir())?;
+    fs::create_dir_all(machine_backups_dir())?;
+    ensure_gitignore_entries(&[
+        "# AgentPort machine-local state",
+        "/machine/machine.local.yaml",
+        "/machine/secrets.local.yaml",
+        "/machine/backups/",
+    ])
+}
+
+fn ensure_gitignore_entries(entries: &[&str]) -> Result<()> {
+    let path = central_repo::skills_dir().join(".gitignore");
+    let mut content = fs::read_to_string(&path).unwrap_or_default();
+    let mut changed = false;
+    for entry in entries {
+        if content.lines().any(|line| line.trim() == *entry) {
+            continue;
+        }
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push_str(entry);
+        content.push('\n');
+        changed = true;
+    }
+    if changed || !path.exists() {
+        fs::write(&path, content)?;
+    }
+    Ok(())
 }
 
 pub fn read_manifest() -> Result<EnvManifest> {
@@ -1305,5 +1354,26 @@ mod tests {
         assert_eq!(artifact.source.path.as_deref(), Some(".codex/config.toml"));
         assert_eq!(artifact.owner.as_ref().unwrap().owner_type, "tool");
         assert_eq!(artifact.owner.as_ref().unwrap().id, "codex");
+    }
+
+    #[test]
+    fn writing_environment_protects_machine_local_overlay() {
+        let _guard = central_repo::test_base_dir_lock();
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().join("repo");
+        central_repo::set_test_base_dir_override(Some(base.clone()));
+        std::fs::create_dir_all(central_repo::skills_dir()).unwrap();
+        let store = SkillStore::new(&base.join("test.db")).unwrap();
+
+        write_current_environment(&store, true).unwrap();
+
+        let gitignore = std::fs::read_to_string(central_repo::skills_dir().join(".gitignore"))
+            .expect(".gitignore should be written");
+        assert!(gitignore.contains("/machine/machine.local.yaml"));
+        assert!(gitignore.contains("/machine/secrets.local.yaml"));
+        assert!(gitignore.contains("/machine/backups/"));
+        assert!(machine_dir().is_dir());
+
+        central_repo::set_test_base_dir_override(None);
     }
 }
