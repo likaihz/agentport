@@ -565,6 +565,24 @@ export interface AgentPortPackagesStatus {
   packages: AgentPortPackageSummary[];
 }
 
+export interface AgentPortProfileSummary {
+  id: string;
+  name: string;
+  description?: string | null;
+  active: boolean;
+  skill_count: number;
+  skills: string[];
+  tool_toggle_count: number;
+  enabled_tool_count: number;
+  enabled_tools: string[];
+}
+
+export interface AgentPortProfilesStatus {
+  profile_count: number;
+  active_profile_id?: string | null;
+  profiles: AgentPortProfileSummary[];
+}
+
 export const agentportEnvStatus = (profile?: string | null) =>
   invoke<AgentPortEnvStatus>("agentport_env_status", { profile: profile ?? null });
 
@@ -588,6 +606,9 @@ export const agentportEnvApply = (profile?: string | null, dryRun = true) =>
 
 export const agentportPackagesStatus = () =>
   invoke<AgentPortPackagesStatus>("agentport_packages_status");
+
+export const agentportProfilesStatus = () =>
+  invoke<AgentPortProfilesStatus>("agentport_profiles_status");
 
 // ── Git Backup ──
 

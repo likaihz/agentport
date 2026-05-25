@@ -10,6 +10,7 @@
     "installSkills": "安裝 Skills",
     "agentport": "AgentPort",
     "agentportPackages": "Packages",
+    "agentportProfiles": "Profiles",
     "presets": "Preset",
     "newPreset": "新增 Preset",
     "projects": "專案工作區",
@@ -190,6 +191,39 @@
     },
     "errors": {
       "refresh": "載入 Packages 失敗"
+    }
+  },
+  "agentportProfiles": {
+    "title": "Profiles",
+    "subtitle": "從 Preset 產生的宣告式 agent 環境 profile。",
+    "loading": "Profiles 載入中",
+    "empty": "還沒有 Profiles",
+    "actions": {
+      "environment": "環境",
+      "refresh": "重新整理"
+    },
+    "stats": {
+      "profiles": "Profiles",
+      "skills": "Skills",
+      "tools": "Tools",
+      "active": "Active"
+    },
+    "sections": {
+      "profiles": "Profiles"
+    },
+    "status": {
+      "active": "目前",
+      "yes": "是",
+      "no": "否"
+    },
+    "metrics": {
+      "skills": "Skills",
+      "tools": "Tools",
+      "toggles": "Toggles",
+      "active": "Active"
+    },
+    "errors": {
+      "refresh": "載入 Profiles 失敗"
     }
   },
   "mySkills": {

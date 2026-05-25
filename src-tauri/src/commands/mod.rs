@@ -1,6 +1,7 @@
 pub mod agent_workspace;
 pub mod agentport_env;
 pub mod agentport_packages;
+pub mod agentport_profiles;
 pub mod browse;
 pub mod git_backup;
 pub mod projects;

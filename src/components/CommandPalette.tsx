@@ -10,6 +10,7 @@ import {
   Folder,
   FileCode2,
   Boxes,
+  SlidersHorizontal,
   Home,
   ArrowRight,
 } from "lucide-react";
@@ -187,6 +188,13 @@ export function CommandPalette() {
         label: t("sidebar.agentportPackages"),
         icon: <Boxes className="h-3.5 w-3.5" />,
         run: () => navigate("/agentport/packages"),
+      },
+      {
+        id: "action:agentport-profiles",
+        kind: "action",
+        label: t("sidebar.agentportProfiles"),
+        icon: <SlidersHorizontal className="h-3.5 w-3.5" />,
+        run: () => navigate("/agentport/profiles"),
       },
       {
         id: "action:settings",

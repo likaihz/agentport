@@ -10,6 +10,7 @@
     "installSkills": "Install Skills",
     "agentport": "AgentPort",
     "agentportPackages": "Packages",
+    "agentportProfiles": "Profiles",
     "presets": "Presets",
     "newPreset": "New Preset",
     "projects": "Project Workspaces",
@@ -190,6 +191,39 @@
     },
     "errors": {
       "refresh": "Failed to load packages"
+    }
+  },
+  "agentportProfiles": {
+    "title": "Profiles",
+    "subtitle": "Declarative agent profiles generated from your presets.",
+    "loading": "Loading profiles",
+    "empty": "No profiles found",
+    "actions": {
+      "environment": "Environment",
+      "refresh": "Refresh"
+    },
+    "stats": {
+      "profiles": "Profiles",
+      "skills": "Skills",
+      "tools": "Tools",
+      "active": "Active"
+    },
+    "sections": {
+      "profiles": "Profiles"
+    },
+    "status": {
+      "active": "Active",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "metrics": {
+      "skills": "Skills",
+      "tools": "Tools",
+      "toggles": "Toggles",
+      "active": "Active"
+    },
+    "errors": {
+      "refresh": "Failed to load profiles"
     }
   },
   "mySkills": {

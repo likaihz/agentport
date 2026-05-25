@@ -13,6 +13,7 @@ import {
   FolderOpen,
   FileCode2,
   Boxes,
+  SlidersHorizontal,
   GripVertical,
   Link2,
   ChevronDown,
@@ -171,6 +172,7 @@ export function Sidebar() {
     { name: t("sidebar.installSkills"), path: "/install", icon: Download },
     { name: t("sidebar.agentport"), path: "/agentport", icon: FileCode2 },
     { name: t("sidebar.agentportPackages"), path: "/agentport/packages", icon: Boxes },
+    { name: t("sidebar.agentportProfiles"), path: "/agentport/profiles", icon: SlidersHorizontal },
   ];
 
   const handleSwitchPreset = (id: string) => {
