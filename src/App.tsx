@@ -15,6 +15,7 @@ import { ProjectDetail } from "./views/ProjectDetail";
 import { AgentPortEnvironment } from "./views/AgentPortEnvironment";
 import { AgentPortPackages } from "./views/AgentPortPackages";
 import { AgentPortProfiles } from "./views/AgentPortProfiles";
+import { AgentPortDiff } from "./views/AgentPortDiff";
 
 function ThemedToaster() {
   const { resolvedTheme } = useThemeContext();
@@ -50,6 +51,7 @@ function App() {
               <Route path="/agentport" element={<AgentPortEnvironment />} />
               <Route path="/agentport/packages" element={<AgentPortPackages />} />
               <Route path="/agentport/profiles" element={<AgentPortProfiles />} />
+              <Route path="/agentport/diff" element={<AgentPortDiff />} />
               <Route path="/project/:id" element={<ProjectDetail />} />
               <Route path="/settings" element={<Settings />} />
             </Route>

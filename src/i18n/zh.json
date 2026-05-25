@@ -11,6 +11,7 @@
     "agentport": "AgentPort",
     "agentportPackages": "Packages",
     "agentportProfiles": "Profiles",
+    "agentportDiff": "Diff",
     "presets": "Preset",
     "newPreset": "新建 Preset",
     "projects": "项目工作区",
@@ -224,6 +225,39 @@
     },
     "errors": {
       "refresh": "加载 Profiles 失败"
+    }
+  },
+  "agentportDiff": {
+    "title": "Diff",
+    "subtitle": "对比本机状态和共享的 AgentPort manifest。",
+    "noManifest": "没有 manifest",
+    "emptyGroup": "没有项目",
+    "issueCount": "{{count}} 个问题",
+    "actions": {
+      "environment": "环境",
+      "refresh": "刷新"
+    },
+    "stats": {
+      "missingSkills": "缺失 Skills",
+      "unmanagedSkills": "未纳管 Skills",
+      "missingArtifacts": "缺失 Artifacts",
+      "changedArtifacts": "已变化 Artifacts"
+    },
+    "sections": {
+      "summary": "摘要"
+    },
+    "groups": {
+      "error": "Diff 错误",
+      "unavailable": "不可用",
+      "missingSkills": "缺失 Skill",
+      "unmanagedSkills": "未纳管 Skill",
+      "missingArtifacts": "缺失 Artifact",
+      "unmanagedArtifacts": "未纳管 Artifact",
+      "changedArtifacts": "已变化 Artifact",
+      "missingProfile": "缺失 Profile"
+    },
+    "errors": {
+      "refresh": "加载 Diff 失败"
     }
   },
   "mySkills": {

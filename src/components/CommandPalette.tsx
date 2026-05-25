@@ -11,6 +11,7 @@ import {
   FileCode2,
   Boxes,
   SlidersHorizontal,
+  GitCompareArrows,
   Home,
   ArrowRight,
 } from "lucide-react";
@@ -195,6 +196,13 @@ export function CommandPalette() {
         label: t("sidebar.agentportProfiles"),
         icon: <SlidersHorizontal className="h-3.5 w-3.5" />,
         run: () => navigate("/agentport/profiles"),
+      },
+      {
+        id: "action:agentport-diff",
+        kind: "action",
+        label: t("sidebar.agentportDiff"),
+        icon: <GitCompareArrows className="h-3.5 w-3.5" />,
+        run: () => navigate("/agentport/diff"),
       },
       {
         id: "action:settings",

@@ -11,6 +11,7 @@
     "agentport": "AgentPort",
     "agentportPackages": "Packages",
     "agentportProfiles": "Profiles",
+    "agentportDiff": "Diff",
     "presets": "Presets",
     "newPreset": "New Preset",
     "projects": "Project Workspaces",
@@ -224,6 +225,39 @@
     },
     "errors": {
       "refresh": "Failed to load profiles"
+    }
+  },
+  "agentportDiff": {
+    "title": "Diff",
+    "subtitle": "Compare this machine with the shared AgentPort manifest.",
+    "noManifest": "No manifest",
+    "emptyGroup": "No items",
+    "issueCount": "{{count}} issue(s)",
+    "actions": {
+      "environment": "Environment",
+      "refresh": "Refresh"
+    },
+    "stats": {
+      "missingSkills": "Missing Skills",
+      "unmanagedSkills": "Unmanaged Skills",
+      "missingArtifacts": "Missing Artifacts",
+      "changedArtifacts": "Changed Artifacts"
+    },
+    "sections": {
+      "summary": "Summary"
+    },
+    "groups": {
+      "error": "Diff error",
+      "unavailable": "Unavailable",
+      "missingSkills": "Missing skill",
+      "unmanagedSkills": "Unmanaged skill",
+      "missingArtifacts": "Missing artifact",
+      "unmanagedArtifacts": "Unmanaged artifact",
+      "changedArtifacts": "Changed artifact",
+      "missingProfile": "Missing profile"
+    },
+    "errors": {
+      "refresh": "Failed to load diff"
     }
   },
   "mySkills": {
