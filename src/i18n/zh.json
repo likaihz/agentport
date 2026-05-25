@@ -1,19 +1,24 @@
 {
   "app": {
-    "name": "Skills Manager"
+    "name": "AgentPort"
   },
   "sidebar": {
+    "overview": "总览",
     "dashboard": "Dashboard",
-    "mySkills": "技能库",
+    "environment": "Environment",
+    "library": "资源库",
+    "mySkills": "Skills",
     "globalWorkspace": "全局工作区",
     "lobsterAgents": "龙虾 Agent",
     "installSkills": "安装 Skills",
-    "agentport": "AgentPort",
+    "environmentModel": "环境模型",
+    "agentport": "Environment",
     "agentportPackages": "Packages",
     "agentportProfiles": "Profiles",
     "agentportArtifacts": "Artifacts",
     "agentportMachines": "Machines",
     "agentportDiff": "Diff",
+    "workspaces": "工作区",
     "presets": "Preset",
     "newPreset": "新建 Preset",
     "projects": "项目工作区",

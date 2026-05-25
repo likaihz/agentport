@@ -1,19 +1,24 @@
 {
   "app": {
-    "name": "Skills Manager"
+    "name": "AgentPort"
   },
   "sidebar": {
+    "overview": "Overview",
     "dashboard": "Dashboard",
-    "mySkills": "Library",
+    "environment": "Environment",
+    "library": "Library",
+    "mySkills": "Skills",
     "globalWorkspace": "Global Workspace",
     "lobsterAgents": "Lobster Agents",
     "installSkills": "Install Skills",
-    "agentport": "AgentPort",
+    "environmentModel": "Environment Model",
+    "agentport": "Environment",
     "agentportPackages": "Packages",
     "agentportProfiles": "Profiles",
     "agentportArtifacts": "Artifacts",
     "agentportMachines": "Machines",
     "agentportDiff": "Diff",
+    "workspaces": "Workspaces",
     "presets": "Presets",
     "newPreset": "New Preset",
     "projects": "Project Workspaces",

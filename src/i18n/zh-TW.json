@@ -1,19 +1,24 @@
 {
   "app": {
-    "name": "Skills Manager"
+    "name": "AgentPort"
   },
   "sidebar": {
+    "overview": "總覽",
     "dashboard": "Dashboard",
-    "mySkills": "技能庫",
+    "environment": "Environment",
+    "library": "資源庫",
+    "mySkills": "Skills",
     "globalWorkspace": "全域工作區",
     "lobsterAgents": "龍蝦 Agent",
     "installSkills": "安裝 Skills",
-    "agentport": "AgentPort",
+    "environmentModel": "環境模型",
+    "agentport": "Environment",
     "agentportPackages": "Packages",
     "agentportProfiles": "Profiles",
     "agentportArtifacts": "Artifacts",
     "agentportMachines": "Machines",
     "agentportDiff": "Diff",
+    "workspaces": "工作區",
     "presets": "Preset",
     "newPreset": "新增 Preset",
     "projects": "專案工作區",
