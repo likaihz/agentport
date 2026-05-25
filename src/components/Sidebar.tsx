@@ -20,6 +20,7 @@ import {
   Link2,
   ChevronDown,
   ChevronRight,
+  type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -77,6 +78,10 @@ export function Sidebar() {
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [globalWorkspaceOpen, setGlobalWorkspaceOpen] = useState(true);
   const [lobsterWorkspaceOpen, setLobsterWorkspaceOpen] = useState(true);
+  const [environmentModelOpen, setEnvironmentModelOpen] = useState(() => {
+    const stored = localStorage.getItem("agentport:sidebar:environment-model-open");
+    return stored === null ? true : stored === "true";
+  });
 
   const globalSkillsByAgent = useMemo(() => {
     const map: Record<string, number> = {};
@@ -90,6 +95,12 @@ export function Sidebar() {
 
   useEffect(() => { setOrderedPresets(presets); }, [presets]);
   useEffect(() => { setOrderedProjects(projects); }, [projects]);
+  useEffect(() => {
+    localStorage.setItem(
+      "agentport:sidebar:environment-model-open",
+      String(environmentModelOpen)
+    );
+  }, [environmentModelOpen]);
   useEffect(() => {
     const stored = localStorage.getItem("skills-manager:tool-order");
     const storedOrder: string[] = stored ? JSON.parse(stored) : [];
@@ -168,13 +179,25 @@ export function Sidebar() {
     }
   };
 
-  const NAV_ITEMS = [
+  type StaticNavItem = {
+    name: string;
+    path: string;
+    icon: LucideIcon;
+  };
+
+  const overviewItems: StaticNavItem[] = [
     { name: t("sidebar.dashboard"), path: "/", icon: LayoutDashboard },
+    { name: t("sidebar.agentport"), path: "/agentport", icon: FileCode2 },
+  ];
+
+  const libraryItems: StaticNavItem[] = [
     { name: t("sidebar.mySkills"), path: "/my-skills", icon: Layers },
     { name: t("sidebar.installSkills"), path: "/install", icon: Download },
-    { name: t("sidebar.agentport"), path: "/agentport", icon: FileCode2 },
-    { name: t("sidebar.agentportPackages"), path: "/agentport/packages", icon: Boxes },
+  ];
+
+  const environmentModelItems: StaticNavItem[] = [
     { name: t("sidebar.agentportProfiles"), path: "/agentport/profiles", icon: SlidersHorizontal },
+    { name: t("sidebar.agentportPackages"), path: "/agentport/packages", icon: Boxes },
     { name: t("sidebar.agentportArtifacts"), path: "/agentport/artifacts", icon: FileCode2 },
     { name: t("sidebar.agentportMachines"), path: "/agentport/machines", icon: HardDrive },
     { name: t("sidebar.agentportDiff"), path: "/agentport/diff", icon: GitCompareArrows },
@@ -244,6 +267,58 @@ export function Sidebar() {
     }
     toast.success(t("project.removed"));
   };
+
+  const renderSectionHeading = (label: string, options?: {
+    isOpen?: boolean;
+    onToggle?: () => void;
+  }) => {
+    const collapsible = Boolean(options?.onToggle);
+    return (
+      <div className="mb-1.5 px-2.5 flex items-center gap-1">
+        {collapsible ? (
+          <button
+            onClick={options?.onToggle}
+            className="flex min-w-0 flex-1 items-center gap-1 text-left outline-none"
+          >
+            {options?.isOpen
+              ? <ChevronDown className="h-3 w-3 shrink-0 text-faint" />
+              : <ChevronRight className="h-3 w-3 shrink-0 text-faint" />}
+            <span className="truncate text-[12px] font-semibold tracking-[0.01em] text-muted whitespace-nowrap">
+              {label}
+            </span>
+          </button>
+        ) : (
+          <span className="truncate pl-4 text-[12px] font-semibold tracking-[0.01em] text-muted whitespace-nowrap">
+            {label}
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const renderStaticNavItems = (items: StaticNavItem[]) => (
+    <div className="space-y-0.5">
+      {items.map((item) => {
+        const Icon = item.icon;
+        const isActive = location.pathname === item.path;
+        return (
+          <Link
+            key={item.path}
+            to={item.path}
+            className={cn(
+              "flex items-center gap-2.5 px-2.5 py-[7px] rounded-[5px] text-sm font-medium transition-colors outline-none",
+              isActive
+                ? "bg-surface-active text-primary"
+                : "text-tertiary hover:text-secondary hover:bg-surface-hover"
+            )}
+          >
+            <Icon className={cn("w-4 h-4 shrink-0", isActive ? "text-accent" : "text-muted")} />
+            <span className="truncate">{item.name}</span>
+          </Link>
+        );
+      })}
+    </div>
+  );
 
   // Renders one workspace category section (Global Workspace for coding agents,
   // Lobster Agents for lobster agents). Both sections share identical UX —
@@ -400,27 +475,23 @@ export function Sidebar() {
           </span>
         </div>
 
-        {/* Nav */}
-        <div className="px-2.5 space-y-0.5 shrink-0">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.path;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  "flex items-center gap-2.5 px-2.5 py-[7px] rounded-[5px] text-sm font-medium transition-colors outline-none",
-                  isActive
-                    ? "bg-surface-active text-primary"
-                    : "text-tertiary hover:text-secondary hover:bg-surface-hover"
-                )}
-              >
-                <Icon className={cn("w-4 h-4 shrink-0", isActive ? "text-accent" : "text-muted")} />
-                {item.name}
-              </Link>
-            );
+        {/* Primary navigation */}
+        <div className="px-2.5 shrink-0">
+          {renderSectionHeading(t("sidebar.overview"))}
+          {renderStaticNavItems(overviewItems)}
+
+          <div className="mx-0.5 mt-3.5 mb-2.5 border-t border-border-subtle" />
+
+          {renderSectionHeading(t("sidebar.library"))}
+          {renderStaticNavItems(libraryItems)}
+
+          <div className="mx-0.5 mt-3.5 mb-2.5 border-t border-border-subtle" />
+
+          {renderSectionHeading(t("sidebar.environmentModel"), {
+            isOpen: environmentModelOpen,
+            onToggle: () => setEnvironmentModelOpen((v) => !v),
           })}
+          {environmentModelOpen && renderStaticNavItems(environmentModelItems)}
         </div>
 
         {/* Divider */}
