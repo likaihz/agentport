@@ -958,6 +958,7 @@ pub fn run() {
             commands::agentport_env::agentport_env_export_resources,
             commands::agentport_env::agentport_env_apply_resources,
             commands::agentport_env::agentport_env_apply,
+            commands::agentport_packages::agentport_packages_status,
             // Projects
             commands::projects::get_projects,
             commands::projects::add_project,

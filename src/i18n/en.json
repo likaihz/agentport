@@ -9,6 +9,7 @@
     "lobsterAgents": "Lobster Agents",
     "installSkills": "Install Skills",
     "agentport": "AgentPort",
+    "agentportPackages": "Packages",
     "presets": "Presets",
     "newPreset": "New Preset",
     "projects": "Project Workspaces",
@@ -152,6 +153,43 @@
       "init": "Failed to initialize AgentPort",
       "export": "Failed to export resources",
       "apply": "Failed to apply profile"
+    }
+  },
+  "agentportPackages": {
+    "title": "Packages",
+    "subtitle": "Package provenance for plugin-owned skills and resource artifacts.",
+    "loading": "Loading packages",
+    "empty": "No packages found",
+    "moreSkills": "+{{count}} more",
+    "actions": {
+      "environment": "Environment",
+      "refresh": "Refresh"
+    },
+    "stats": {
+      "packages": "Packages",
+      "skills": "Skills",
+      "artifacts": "Artifacts",
+      "updates": "Updates"
+    },
+    "sections": {
+      "packages": "Packages"
+    },
+    "unmanaged": {
+      "title": "Unpackaged skills",
+      "detail": "{{count}} managed skill(s) are not owned by a package."
+    },
+    "status": {
+      "current": "Current",
+      "update": "Update"
+    },
+    "metrics": {
+      "skills": "Skills",
+      "artifacts": "Artifacts",
+      "updates": "Updates",
+      "branch": "Branch"
+    },
+    "errors": {
+      "refresh": "Failed to load packages"
     }
   },
   "mySkills": {

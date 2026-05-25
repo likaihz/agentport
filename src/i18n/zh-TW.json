@@ -9,6 +9,7 @@
     "lobsterAgents": "龍蝦 Agent",
     "installSkills": "安裝 Skills",
     "agentport": "AgentPort",
+    "agentportPackages": "Packages",
     "presets": "Preset",
     "newPreset": "新增 Preset",
     "projects": "專案工作區",
@@ -152,6 +153,43 @@
       "init": "初始化 AgentPort 失敗",
       "export": "匯出資源失敗",
       "apply": "套用 Profile 失敗"
+    }
+  },
+  "agentportPackages": {
+    "title": "Packages",
+    "subtitle": "插件擁有的 Skills 和資源 Artifacts 的 package 來源資訊。",
+    "loading": "Packages 載入中",
+    "empty": "還沒有 Packages",
+    "moreSkills": "+{{count}} 個",
+    "actions": {
+      "environment": "環境",
+      "refresh": "重新整理"
+    },
+    "stats": {
+      "packages": "Packages",
+      "skills": "Skills",
+      "artifacts": "Artifacts",
+      "updates": "Updates"
+    },
+    "sections": {
+      "packages": "Packages"
+    },
+    "unmanaged": {
+      "title": "未歸屬 Package 的 Skills",
+      "detail": "{{count}} 個已納管 Skill 目前沒有 Package 歸屬。"
+    },
+    "status": {
+      "current": "已最新",
+      "update": "可更新"
+    },
+    "metrics": {
+      "skills": "Skills",
+      "artifacts": "Artifacts",
+      "updates": "Updates",
+      "branch": "Branch"
+    },
+    "errors": {
+      "refresh": "載入 Packages 失敗"
     }
   },
   "mySkills": {

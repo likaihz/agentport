@@ -9,6 +9,7 @@ import {
   FolderOpen,
   Folder,
   FileCode2,
+  Boxes,
   Home,
   ArrowRight,
 } from "lucide-react";
@@ -179,6 +180,13 @@ export function CommandPalette() {
         label: t("sidebar.agentport"),
         icon: <FileCode2 className="h-3.5 w-3.5" />,
         run: () => navigate("/agentport"),
+      },
+      {
+        id: "action:agentport-packages",
+        kind: "action",
+        label: t("sidebar.agentportPackages"),
+        icon: <Boxes className="h-3.5 w-3.5" />,
+        run: () => navigate("/agentport/packages"),
       },
       {
         id: "action:settings",
