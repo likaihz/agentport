@@ -772,7 +772,7 @@ export function MySkills() {
   const handleRefreshSkill = async (skill: ManagedSkill) => {
     setUpdatingSkillId(skill.id);
     try {
-      if (skill.source_type === "local" || skill.source_type === "import") {
+      if (skill.source_type === "local" || skill.source_type === "import" || skill.source_type === "local_linked") {
         await api.reimportLocalSkill(skill.id);
         toast.success(t("mySkills.updateActions.reimported"));
       } else {
@@ -1088,6 +1088,7 @@ export function MySkills() {
         return <Github className="h-3 w-3" />;
       case "local":
       case "import":
+      case "local_linked":
         return <HardDrive className="h-3 w-3" />;
       default:
         return <Globe className="h-3 w-3" />;
@@ -1097,7 +1098,8 @@ export function MySkills() {
   const canRefresh = (skill: ManagedSkill) =>
     skill.source_type === "git" ||
     skill.source_type === "skillssh" ||
-    ((skill.source_type === "local" || skill.source_type === "import") && !!skill.source_ref);
+    ((skill.source_type === "local" || skill.source_type === "import" || skill.source_type === "local_linked")
+      && Boolean(skill.source_ref || skill.source_ref_resolved));
 
   const anyRefreshableSelected = useMemo(
     () => skills.some((skill) => selectedIds.has(skill.id) && canRefresh(skill)),
@@ -1138,7 +1140,7 @@ export function MySkills() {
   };
 
   const refreshLabel = (skill: ManagedSkill) =>
-    skill.source_type === "local" || skill.source_type === "import"
+    skill.source_type === "local" || skill.source_type === "import" || skill.source_type === "local_linked"
       ? t("mySkills.updateActions.reimport")
       : t("mySkills.updateActions.update");
 
@@ -1501,7 +1503,7 @@ export function MySkills() {
             const badge = statusBadge(skill);
             const isMissingLocalSource =
               skill.update_status === "source_missing"
-              && (skill.source_type === "local" || skill.source_type === "import");
+              && (skill.source_type === "local" || skill.source_type === "import" || skill.source_type === "local_linked");
             const displayName = skillDisplayNames.get(skill.id) || skill.name;
 
             if (viewMode === "grid") {
