@@ -12,6 +12,7 @@
     "agentportPackages": "Packages",
     "agentportProfiles": "Profiles",
     "agentportArtifacts": "Artifacts",
+    "agentportMachines": "Machines",
     "agentportDiff": "Diff",
     "presets": "Preset",
     "newPreset": "新增 Preset",
@@ -320,6 +321,49 @@
     },
     "errors": {
       "refresh": "載入 Artifacts 失敗"
+    }
+  },
+  "agentportMachines": {
+    "title": "Machines",
+    "subtitle": "本機 machine-local overlay、secrets 存在狀態和本機備份狀態。",
+    "loading": "機器狀態載入中",
+    "actions": {
+      "environment": "環境",
+      "refresh": "重新整理"
+    },
+    "stats": {
+      "origins": "Origins",
+      "secrets": "Secrets",
+      "missingSecrets": "缺失 Secrets",
+      "backups": "Backups"
+    },
+    "sections": {
+      "localState": "本機狀態",
+      "origins": "關聯 Origins",
+      "secrets": "Secrets",
+      "warnings": "警告"
+    },
+    "fields": {
+      "machineDir": "Machine 目錄",
+      "machineLocal": "Machine overlay",
+      "secretsLocal": "Secrets overlay",
+      "backups": "Backups",
+      "gitignore": "Git 保護",
+      "warning": "警告"
+    },
+    "status": {
+      "protected": "已保護",
+      "needsProtection": "需要保護",
+      "present": "已存在",
+      "missing": "缺失"
+    },
+    "empty": {
+      "origins": "沒有關聯 origins",
+      "secrets": "沒有 machine secrets",
+      "none": "無"
+    },
+    "errors": {
+      "refresh": "載入機器狀態失敗"
     }
   },
   "mySkills": {

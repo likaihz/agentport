@@ -12,6 +12,7 @@
     "agentportPackages": "Packages",
     "agentportProfiles": "Profiles",
     "agentportArtifacts": "Artifacts",
+    "agentportMachines": "Machines",
     "agentportDiff": "Diff",
     "presets": "Preset",
     "newPreset": "新建 Preset",
@@ -320,6 +321,49 @@
     },
     "errors": {
       "refresh": "加载 Artifacts 失败"
+    }
+  },
+  "agentportMachines": {
+    "title": "Machines",
+    "subtitle": "本机 machine-local overlay、secrets 存在状态和本地备份状态。",
+    "loading": "机器状态加载中",
+    "actions": {
+      "environment": "环境",
+      "refresh": "刷新"
+    },
+    "stats": {
+      "origins": "Origins",
+      "secrets": "Secrets",
+      "missingSecrets": "缺失 Secrets",
+      "backups": "Backups"
+    },
+    "sections": {
+      "localState": "本机状态",
+      "origins": "关联 Origins",
+      "secrets": "Secrets",
+      "warnings": "警告"
+    },
+    "fields": {
+      "machineDir": "Machine 目录",
+      "machineLocal": "Machine overlay",
+      "secretsLocal": "Secrets overlay",
+      "backups": "Backups",
+      "gitignore": "Git 保护",
+      "warning": "警告"
+    },
+    "status": {
+      "protected": "已保护",
+      "needsProtection": "需要保护",
+      "present": "已存在",
+      "missing": "缺失"
+    },
+    "empty": {
+      "origins": "没有关联 origins",
+      "secrets": "没有 machine secrets",
+      "none": "无"
+    },
+    "errors": {
+      "refresh": "加载机器状态失败"
     }
   },
   "mySkills": {

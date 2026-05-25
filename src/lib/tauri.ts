@@ -618,6 +618,32 @@ export interface AgentPortArtifactsStatus {
   artifacts: AgentPortArtifactSummary[];
 }
 
+export interface AgentPortMachineOriginSummary {
+  id: string;
+  path: string;
+  updated_at: string;
+}
+
+export interface AgentPortMachineStatus {
+  machine_dir: string;
+  machine_local_path: string;
+  secrets_local_path: string;
+  backups_dir: string;
+  machine_dir_exists: boolean;
+  machine_local_exists: boolean;
+  secrets_local_exists: boolean;
+  backups_dir_exists: boolean;
+  gitignore_protected: boolean;
+  origin_count: number;
+  secret_count: number;
+  missing_secret_count: number;
+  backup_count: number;
+  origins: AgentPortMachineOriginSummary[];
+  secret_ids: string[];
+  missing_secret_ids: string[];
+  warnings: string[];
+}
+
 export const agentportEnvStatus = (profile?: string | null) =>
   invoke<AgentPortEnvStatus>("agentport_env_status", { profile: profile ?? null });
 
@@ -647,6 +673,9 @@ export const agentportProfilesStatus = () =>
 
 export const agentportArtifactsStatus = () =>
   invoke<AgentPortArtifactsStatus>("agentport_artifacts_status");
+
+export const agentportMachineStatus = () =>
+  invoke<AgentPortMachineStatus>("agentport_machine_status");
 
 // ── Git Backup ──
 

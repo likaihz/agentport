@@ -12,6 +12,7 @@
     "agentportPackages": "Packages",
     "agentportProfiles": "Profiles",
     "agentportArtifacts": "Artifacts",
+    "agentportMachines": "Machines",
     "agentportDiff": "Diff",
     "presets": "Presets",
     "newPreset": "New Preset",
@@ -320,6 +321,49 @@
     },
     "errors": {
       "refresh": "Failed to load artifacts"
+    }
+  },
+  "agentportMachines": {
+    "title": "Machines",
+    "subtitle": "Machine-local overlay, secrets presence, and local backup state for this device.",
+    "loading": "Loading machine state",
+    "actions": {
+      "environment": "Environment",
+      "refresh": "Refresh"
+    },
+    "stats": {
+      "origins": "Origins",
+      "secrets": "Secrets",
+      "missingSecrets": "Missing Secrets",
+      "backups": "Backups"
+    },
+    "sections": {
+      "localState": "Local State",
+      "origins": "Linked Origins",
+      "secrets": "Secrets",
+      "warnings": "Warnings"
+    },
+    "fields": {
+      "machineDir": "Machine dir",
+      "machineLocal": "Machine overlay",
+      "secretsLocal": "Secrets overlay",
+      "backups": "Backups",
+      "gitignore": "Git protection",
+      "warning": "Warning"
+    },
+    "status": {
+      "protected": "Protected",
+      "needsProtection": "Needs protection",
+      "present": "Present",
+      "missing": "Missing"
+    },
+    "empty": {
+      "origins": "No linked origins",
+      "secrets": "No machine secrets",
+      "none": "None"
+    },
+    "errors": {
+      "refresh": "Failed to load machine state"
     }
   },
   "mySkills": {

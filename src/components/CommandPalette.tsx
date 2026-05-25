@@ -9,6 +9,7 @@ import {
   FolderOpen,
   Folder,
   FileCode2,
+  HardDrive,
   Boxes,
   SlidersHorizontal,
   GitCompareArrows,
@@ -203,6 +204,13 @@ export function CommandPalette() {
         label: t("sidebar.agentportArtifacts"),
         icon: <FileCode2 className="h-3.5 w-3.5" />,
         run: () => navigate("/agentport/artifacts"),
+      },
+      {
+        id: "action:agentport-machines",
+        kind: "action",
+        label: t("sidebar.agentportMachines"),
+        icon: <HardDrive className="h-3.5 w-3.5" />,
+        run: () => navigate("/agentport/machines"),
       },
       {
         id: "action:agentport-diff",
