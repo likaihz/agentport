@@ -962,6 +962,9 @@ pub fn run() {
             commands::agentport_machines::agentport_machine_status,
             commands::agentport_packages::agentport_packages_status,
             commands::agentport_profiles::agentport_profiles_status,
+            commands::agentport_targets::agentport_target_drifts,
+            commands::agentport_targets::agentport_pull_target,
+            commands::agentport_targets::agentport_discard_target,
             // Projects
             commands::projects::get_projects,
             commands::projects::add_project,

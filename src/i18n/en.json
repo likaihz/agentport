@@ -289,11 +289,15 @@
     "title": "Artifacts",
     "subtitle": "Managed skills, package artifacts, and agent resource targets in this environment.",
     "loading": "Loading artifacts",
+    "loadingTargets": "Loading target drift",
     "empty": "No artifacts found",
+    "emptyTargets": "No copy target drift",
     "moreTargets": "+{{count}} more",
     "actions": {
       "diff": "Diff",
-      "refresh": "Refresh"
+      "refresh": "Refresh",
+      "pullTarget": "Pull Target",
+      "discardTarget": "Discard Target"
     },
     "stats": {
       "artifacts": "Artifacts",
@@ -302,7 +306,8 @@
       "drift": "Drift"
     },
     "sections": {
-      "artifacts": "Artifacts"
+      "artifacts": "Artifacts",
+      "targetDrift": "Copy Target Drift"
     },
     "status": {
       "synced": "Synced",
@@ -310,17 +315,33 @@
       "drifted": "Drifted",
       "unmanaged": "Unmanaged"
     },
+    "targetStatus": {
+      "target_newer": "Target newer",
+      "central_newer": "Central newer",
+      "conflict": "Conflict",
+      "missing": "Missing",
+      "drifted": "Drifted"
+    },
     "metrics": {
       "path": "Path",
       "owner": "Owner",
-      "targets": "Targets"
+      "targets": "Targets",
+      "centralHash": "Central",
+      "targetHash": "Target",
+      "lastSyncedHash": "Last sync"
     },
     "unmanaged": {
       "title": "Unmanaged artifacts",
       "detail": "{{count}} artifact(s) exist on this machine but are not declared in the manifest."
     },
+    "toasts": {
+      "pulledTarget": "Target pulled into the central skill",
+      "discardedTarget": "Target drift discarded"
+    },
     "errors": {
-      "refresh": "Failed to load artifacts"
+      "refresh": "Failed to load artifacts",
+      "pullTarget": "Failed to pull target",
+      "discardTarget": "Failed to discard target"
     }
   },
   "agentportMachines": {

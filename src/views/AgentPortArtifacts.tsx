@@ -3,12 +3,14 @@ import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
+  Download,
   FileCode2,
   GitCompareArrows,
   Layers,
   Loader2,
   RefreshCw,
   Route,
+  RotateCcw,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -30,6 +32,9 @@ function statusTone(status: string) {
       return "border-accent-border bg-accent-bg text-accent-light";
     case "missing":
     case "drifted":
+    case "target_newer":
+    case "central_newer":
+    case "conflict":
       return "border-amber-500/30 bg-amber-500/[0.08] text-amber-400";
     case "unmanaged":
       return "border-sky-500/30 bg-sky-500/[0.08] text-sky-400";
@@ -38,16 +43,28 @@ function statusTone(status: string) {
   }
 }
 
+function shortHash(hash?: string | null) {
+  if (!hash) return "--";
+  return hash.length > 12 ? hash.slice(0, 12) : hash;
+}
+
 export function AgentPortArtifacts() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [status, setStatus] = useState<api.AgentPortArtifactsStatus | null>(null);
+  const [targetStatus, setTargetStatus] = useState<api.AgentPortTargetDriftStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [busyTarget, setBusyTarget] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setStatus(await api.agentportArtifactsStatus());
+      const [artifactStatus, driftStatus] = await Promise.all([
+        api.agentportArtifactsStatus(),
+        api.agentportTargetDrifts(),
+      ]);
+      setStatus(artifactStatus);
+      setTargetStatus(driftStatus);
     } catch (error) {
       toast.error(getErrorMessage(error, t("agentportArtifacts.errors.refresh")));
     } finally {
@@ -64,6 +81,29 @@ export function AgentPortArtifacts() {
     () => artifacts.filter((artifact) => artifact.status === "unmanaged").length,
     [artifacts],
   );
+  const targetDrifts = useMemo(() => targetStatus?.targets ?? [], [targetStatus]);
+
+  const handleTargetAction = async (
+    action: "pull" | "discard",
+    target: api.AgentPortTargetDrift,
+  ) => {
+    const key = `${action}:${target.skill_id}:${target.tool}`;
+    setBusyTarget(key);
+    try {
+      if (action === "pull") {
+        await api.agentportPullTarget(target.skill_id, target.tool);
+        toast.success(t("agentportArtifacts.toasts.pulledTarget"));
+      } else {
+        await api.agentportDiscardTarget(target.skill_id, target.tool);
+        toast.success(t("agentportArtifacts.toasts.discardedTarget"));
+      }
+      await refresh();
+    } catch (error) {
+      toast.error(getErrorMessage(error, t(`agentportArtifacts.errors.${action}Target`)));
+    } finally {
+      setBusyTarget(null);
+    }
+  };
 
   const stats = [
     {
@@ -172,6 +212,32 @@ export function AgentPortArtifacts() {
           )}
         </div>
       </section>
+
+      <section>
+        <h2 className="app-section-title mb-2.5">{t("agentportArtifacts.sections.targetDrift")}</h2>
+        <div className="app-panel overflow-hidden divide-y divide-border-subtle">
+          {loading && !targetStatus ? (
+            <div className="flex items-center gap-2 px-4 py-6 text-[13px] text-muted">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t("agentportArtifacts.loadingTargets")}
+            </div>
+          ) : targetDrifts.length === 0 ? (
+            <div className="flex items-center gap-2 px-4 py-6 text-[13px] text-muted">
+              <CheckCircle2 className="h-4 w-4" />
+              {t("agentportArtifacts.emptyTargets")}
+            </div>
+          ) : (
+            targetDrifts.map((target) => (
+              <TargetDriftRow
+                key={`${target.skill_id}:${target.tool}`}
+                target={target}
+                busyTarget={busyTarget}
+                onAction={handleTargetAction}
+              />
+            ))
+          )}
+        </div>
+      </section>
     </div>
   );
 }
@@ -232,6 +298,73 @@ function ArtifactRow({ artifact }: { artifact: api.AgentPortArtifactSummary }) {
           {artifact.expected_hash ?? "--"} -&gt; {artifact.current_hash ?? "--"}
         </p>
       )}
+    </div>
+  );
+}
+
+function TargetDriftRow({
+  target,
+  busyTarget,
+  onAction,
+}: {
+  target: api.AgentPortTargetDrift;
+  busyTarget: string | null;
+  onAction: (action: "pull" | "discard", target: api.AgentPortTargetDrift) => void;
+}) {
+  const { t } = useTranslation();
+  const pullKey = `pull:${target.skill_id}:${target.tool}`;
+  const discardKey = `discard:${target.skill_id}:${target.tool}`;
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h3 className="truncate text-[13px] font-medium text-secondary" title={target.skill_id}>
+              {target.skill_name}
+            </h3>
+            <span className="app-badge py-0.5 text-[11px]">{target.tool}</span>
+            <span className="app-badge py-0.5 text-[11px]">{target.mode}</span>
+          </div>
+          <p className="mt-1 truncate text-[12px] text-muted" title={target.target_path}>
+            {compactPath(target.target_path)}
+          </p>
+        </div>
+        <span className={cn(
+          "inline-flex h-6 min-w-[100px] items-center justify-center gap-1.5 rounded-md border px-2 text-[12px] font-medium",
+          statusTone(target.status),
+        )}>
+          <AlertTriangle className="h-3 w-3" />
+          {t(`agentportArtifacts.targetStatus.${target.status}`, { defaultValue: target.status })}
+        </span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-2 text-[12px] text-muted md:grid-cols-3">
+        <Metric label={t("agentportArtifacts.metrics.centralHash")} value={shortHash(target.central_hash)} />
+        <Metric label={t("agentportArtifacts.metrics.targetHash")} value={shortHash(target.target_hash)} />
+        <Metric label={t("agentportArtifacts.metrics.lastSyncedHash")} value={shortHash(target.last_synced_hash)} />
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onAction("pull", target)}
+          disabled={!target.can_pull || Boolean(busyTarget)}
+          className="app-button-secondary"
+        >
+          {busyTarget === pullKey ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          {t("agentportArtifacts.actions.pullTarget")}
+        </button>
+        <button
+          type="button"
+          onClick={() => onAction("discard", target)}
+          disabled={!target.can_discard || Boolean(busyTarget)}
+          className="app-button-secondary"
+        >
+          {busyTarget === discardKey ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          {t("agentportArtifacts.actions.discardTarget")}
+        </button>
+      </div>
     </div>
   );
 }

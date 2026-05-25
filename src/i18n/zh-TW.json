@@ -289,11 +289,15 @@
     "title": "Artifacts",
     "subtitle": "目前環境中被納管的 Skills、package artifacts 和 agent 資源目標。",
     "loading": "Artifacts 載入中",
+    "loadingTargets": "Target 漂移載入中",
     "empty": "還沒有 Artifacts",
+    "emptyTargets": "沒有 copy target 漂移",
     "moreTargets": "+{{count}} 個",
     "actions": {
       "diff": "Diff",
-      "refresh": "重新整理"
+      "refresh": "重新整理",
+      "pullTarget": "回流 Target",
+      "discardTarget": "丟棄 Target 變更"
     },
     "stats": {
       "artifacts": "Artifacts",
@@ -302,7 +306,8 @@
       "drift": "漂移"
     },
     "sections": {
-      "artifacts": "Artifacts"
+      "artifacts": "Artifacts",
+      "targetDrift": "Copy Target 漂移"
     },
     "status": {
       "synced": "已同步",
@@ -310,17 +315,33 @@
       "drifted": "已漂移",
       "unmanaged": "未納管"
     },
+    "targetStatus": {
+      "target_newer": "Target 更新",
+      "central_newer": "中心更新",
+      "conflict": "衝突",
+      "missing": "缺失",
+      "drifted": "已漂移"
+    },
     "metrics": {
       "path": "路徑",
       "owner": "歸屬",
-      "targets": "目標"
+      "targets": "目標",
+      "centralHash": "中心",
+      "targetHash": "Target",
+      "lastSyncedHash": "上次同步"
     },
     "unmanaged": {
       "title": "未納管 Artifacts",
       "detail": "本機有 {{count}} 個 artifact 未在 manifest 中宣告。"
     },
+    "toasts": {
+      "pulledTarget": "Target 已回流到中心 Skill",
+      "discardedTarget": "Target 漂移已丟棄"
+    },
     "errors": {
-      "refresh": "載入 Artifacts 失敗"
+      "refresh": "載入 Artifacts 失敗",
+      "pullTarget": "回流 Target 失敗",
+      "discardTarget": "丟棄 Target 變更失敗"
     }
   },
   "agentportMachines": {

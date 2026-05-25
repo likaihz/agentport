@@ -644,6 +644,36 @@ export interface AgentPortMachineStatus {
   warnings: string[];
 }
 
+export interface AgentPortTargetDrift {
+  skill_id: string;
+  skill_name: string;
+  tool: string;
+  target_path: string;
+  mode: string;
+  status: string;
+  central_hash?: string | null;
+  target_hash?: string | null;
+  last_synced_hash?: string | null;
+  can_pull: boolean;
+  can_discard: boolean;
+}
+
+export interface AgentPortTargetDriftStatus {
+  target_count: number;
+  drift_count: number;
+  targets: AgentPortTargetDrift[];
+}
+
+export interface AgentPortTargetActionReport {
+  ok: boolean;
+  action: string;
+  skill_id: string;
+  skill_name: string;
+  tool: string;
+  target_path: string;
+  mode: string;
+}
+
 export const agentportEnvStatus = (profile?: string | null) =>
   invoke<AgentPortEnvStatus>("agentport_env_status", { profile: profile ?? null });
 
@@ -676,6 +706,15 @@ export const agentportArtifactsStatus = () =>
 
 export const agentportMachineStatus = () =>
   invoke<AgentPortMachineStatus>("agentport_machine_status");
+
+export const agentportTargetDrifts = () =>
+  invoke<AgentPortTargetDriftStatus>("agentport_target_drifts");
+
+export const agentportPullTarget = (skillId: string, tool: string) =>
+  invoke<AgentPortTargetActionReport>("agentport_pull_target", { skillId, tool });
+
+export const agentportDiscardTarget = (skillId: string, tool: string) =>
+  invoke<AgentPortTargetActionReport>("agentport_discard_target", { skillId, tool });
 
 // ── Git Backup ──
 
