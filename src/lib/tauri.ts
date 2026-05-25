@@ -583,6 +583,41 @@ export interface AgentPortProfilesStatus {
   profiles: AgentPortProfileSummary[];
 }
 
+export interface AgentPortArtifactTargetSummary {
+  tool: string;
+  path: string;
+  mode: string;
+  status: string;
+}
+
+export interface AgentPortArtifactSummary {
+  id: string;
+  kind: string;
+  name: string;
+  path: string;
+  status: string;
+  source_type: string;
+  source_confidence: string;
+  package_id?: string | null;
+  owner_type?: string | null;
+  owner_id?: string | null;
+  expected_hash?: string | null;
+  current_hash?: string | null;
+  target_count: number;
+  targets: AgentPortArtifactTargetSummary[];
+}
+
+export interface AgentPortArtifactsStatus {
+  manifest_path: string;
+  manifest_exists: boolean;
+  artifact_count: number;
+  skill_count: number;
+  resource_count: number;
+  package_owned_count: number;
+  drift_count: number;
+  artifacts: AgentPortArtifactSummary[];
+}
+
 export const agentportEnvStatus = (profile?: string | null) =>
   invoke<AgentPortEnvStatus>("agentport_env_status", { profile: profile ?? null });
 
@@ -609,6 +644,9 @@ export const agentportPackagesStatus = () =>
 
 export const agentportProfilesStatus = () =>
   invoke<AgentPortProfilesStatus>("agentport_profiles_status");
+
+export const agentportArtifactsStatus = () =>
+  invoke<AgentPortArtifactsStatus>("agentport_artifacts_status");
 
 // ── Git Backup ──
 

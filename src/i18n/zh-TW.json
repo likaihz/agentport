@@ -11,6 +11,7 @@
     "agentport": "AgentPort",
     "agentportPackages": "Packages",
     "agentportProfiles": "Profiles",
+    "agentportArtifacts": "Artifacts",
     "agentportDiff": "Diff",
     "presets": "Preset",
     "newPreset": "新增 Preset",
@@ -235,6 +236,11 @@
     "issueCount": "{{count}} 個問題",
     "actions": {
       "environment": "環境",
+      "artifacts": "Artifacts",
+      "planApply": "預覽套用",
+      "apply": "套用 Profile",
+      "planExport": "預覽匯出",
+      "export": "匯出資源",
       "refresh": "重新整理"
     },
     "stats": {
@@ -244,7 +250,8 @@
       "changedArtifacts": "已變更 Artifacts"
     },
     "sections": {
-      "summary": "摘要"
+      "summary": "摘要",
+      "resolve": "處理"
     },
     "groups": {
       "error": "Diff 錯誤",
@@ -256,8 +263,63 @@
       "changedArtifacts": "已變更 Artifact",
       "missingProfile": "缺失 Profile"
     },
+    "report": {
+      "apply": "Profile 套用",
+      "export": "資源匯出",
+      "planned": "Dry run",
+      "applied": "已執行",
+      "itemCount": "{{count}} 項",
+      "missingSkill": "缺失 Skill"
+    },
+    "toasts": {
+      "applyPlanned": "套用預覽已產生",
+      "applied": "Profile 已套用",
+      "applyBlocked": "{{count}} 個 Skill 缺失",
+      "exportPlanned": "匯出預覽已產生",
+      "exported": "資源已匯出"
+    },
     "errors": {
-      "refresh": "載入 Diff 失敗"
+      "refresh": "載入 Diff 失敗",
+      "apply": "套用 Profile 失敗",
+      "export": "匯出資源失敗"
+    }
+  },
+  "agentportArtifacts": {
+    "title": "Artifacts",
+    "subtitle": "目前環境中被納管的 Skills、package artifacts 和 agent 資源目標。",
+    "loading": "Artifacts 載入中",
+    "empty": "還沒有 Artifacts",
+    "moreTargets": "+{{count}} 個",
+    "actions": {
+      "diff": "Diff",
+      "refresh": "重新整理"
+    },
+    "stats": {
+      "artifacts": "Artifacts",
+      "skills": "Skills",
+      "packageOwned": "Package 歸屬",
+      "drift": "漂移"
+    },
+    "sections": {
+      "artifacts": "Artifacts"
+    },
+    "status": {
+      "synced": "已同步",
+      "missing": "缺失",
+      "drifted": "已漂移",
+      "unmanaged": "未納管"
+    },
+    "metrics": {
+      "path": "路徑",
+      "owner": "歸屬",
+      "targets": "目標"
+    },
+    "unmanaged": {
+      "title": "未納管 Artifacts",
+      "detail": "本機有 {{count}} 個 artifact 未在 manifest 中宣告。"
+    },
+    "errors": {
+      "refresh": "載入 Artifacts 失敗"
     }
   },
   "mySkills": {

@@ -198,6 +198,13 @@ export function CommandPalette() {
         run: () => navigate("/agentport/profiles"),
       },
       {
+        id: "action:agentport-artifacts",
+        kind: "action",
+        label: t("sidebar.agentportArtifacts"),
+        icon: <FileCode2 className="h-3.5 w-3.5" />,
+        run: () => navigate("/agentport/artifacts"),
+      },
+      {
         id: "action:agentport-diff",
         kind: "action",
         label: t("sidebar.agentportDiff"),

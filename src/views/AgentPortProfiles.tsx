@@ -40,7 +40,7 @@ export function AgentPortProfiles() {
     void refresh();
   }, [refresh]);
 
-  const profiles = status?.profiles ?? [];
+  const profiles = useMemo(() => status?.profiles ?? [], [status]);
   const activeProfile = profiles.find((profile) => profile.active);
   const enabledToolCount = useMemo(
     () => new Set(profiles.flatMap((profile) => profile.enabled_tools)).size,

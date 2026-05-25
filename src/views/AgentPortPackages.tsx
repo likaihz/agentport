@@ -50,7 +50,7 @@ export function AgentPortPackages() {
     void refresh();
   }, [refresh]);
 
-  const packages = status?.packages ?? [];
+  const packages = useMemo(() => status?.packages ?? [], [status]);
   const artifactCount = useMemo(
     () => packages.reduce((sum, pkg) => sum + pkg.artifact_count, 0),
     [packages],

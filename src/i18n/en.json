@@ -11,6 +11,7 @@
     "agentport": "AgentPort",
     "agentportPackages": "Packages",
     "agentportProfiles": "Profiles",
+    "agentportArtifacts": "Artifacts",
     "agentportDiff": "Diff",
     "presets": "Presets",
     "newPreset": "New Preset",
@@ -235,6 +236,11 @@
     "issueCount": "{{count}} issue(s)",
     "actions": {
       "environment": "Environment",
+      "artifacts": "Artifacts",
+      "planApply": "Plan Apply",
+      "apply": "Apply Profile",
+      "planExport": "Plan Export",
+      "export": "Export Resources",
       "refresh": "Refresh"
     },
     "stats": {
@@ -244,7 +250,8 @@
       "changedArtifacts": "Changed Artifacts"
     },
     "sections": {
-      "summary": "Summary"
+      "summary": "Summary",
+      "resolve": "Resolve"
     },
     "groups": {
       "error": "Diff error",
@@ -256,8 +263,63 @@
       "changedArtifacts": "Changed artifact",
       "missingProfile": "Missing profile"
     },
+    "report": {
+      "apply": "Profile apply",
+      "export": "Resource export",
+      "planned": "Dry run",
+      "applied": "Applied",
+      "itemCount": "{{count}} item(s)",
+      "missingSkill": "Missing skill"
+    },
+    "toasts": {
+      "applyPlanned": "Apply plan ready",
+      "applied": "Profile applied",
+      "applyBlocked": "{{count}} missing skill(s)",
+      "exportPlanned": "Export plan ready",
+      "exported": "Resources exported"
+    },
     "errors": {
-      "refresh": "Failed to load diff"
+      "refresh": "Failed to load diff",
+      "apply": "Failed to apply profile",
+      "export": "Failed to export resources"
+    }
+  },
+  "agentportArtifacts": {
+    "title": "Artifacts",
+    "subtitle": "Managed skills, package artifacts, and agent resource targets in this environment.",
+    "loading": "Loading artifacts",
+    "empty": "No artifacts found",
+    "moreTargets": "+{{count}} more",
+    "actions": {
+      "diff": "Diff",
+      "refresh": "Refresh"
+    },
+    "stats": {
+      "artifacts": "Artifacts",
+      "skills": "Skills",
+      "packageOwned": "Package-owned",
+      "drift": "Drift"
+    },
+    "sections": {
+      "artifacts": "Artifacts"
+    },
+    "status": {
+      "synced": "Synced",
+      "missing": "Missing",
+      "drifted": "Drifted",
+      "unmanaged": "Unmanaged"
+    },
+    "metrics": {
+      "path": "Path",
+      "owner": "Owner",
+      "targets": "Targets"
+    },
+    "unmanaged": {
+      "title": "Unmanaged artifacts",
+      "detail": "{{count}} artifact(s) exist on this machine but are not declared in the manifest."
+    },
+    "errors": {
+      "refresh": "Failed to load artifacts"
     }
   },
   "mySkills": {

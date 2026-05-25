@@ -25,6 +25,15 @@ export function AgentPortDiff() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [status, setStatus] = useState<api.AgentPortEnvStatus | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [lastReport, setLastReport] = useState<{
+    kind: "apply" | "export";
+    ok: boolean;
+    dryRun: boolean;
+    itemCount: number;
+    missingSkills: string[];
+    items: api.AgentPortEnvResourceActionItem[];
+  } | null>(null);
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -41,6 +50,52 @@ export function AgentPortDiff() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const handleApplyProfile = async (dryRun: boolean) => {
+    setBusy(dryRun ? "planApply" : "apply");
+    try {
+      const report = await api.agentportEnvApply(null, dryRun);
+      setLastReport({
+        kind: "apply",
+        ok: report.ok,
+        dryRun: report.dry_run,
+        itemCount: report.targets.length + report.resources.length,
+        missingSkills: report.missing_skills,
+        items: report.resources,
+      });
+      if (report.missing_skills.length > 0) {
+        toast.error(t("agentportDiff.toasts.applyBlocked", { count: report.missing_skills.length }));
+      } else {
+        toast.success(dryRun ? t("agentportDiff.toasts.applyPlanned") : t("agentportDiff.toasts.applied"));
+      }
+      if (!dryRun) await refresh();
+    } catch (error) {
+      toast.error(getErrorMessage(error, t("agentportDiff.errors.apply")));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleExportResources = async (dryRun: boolean) => {
+    setBusy(dryRun ? "planExport" : "export");
+    try {
+      const report = await api.agentportEnvExportResources(true, dryRun);
+      setLastReport({
+        kind: "export",
+        ok: report.ok,
+        dryRun: report.dry_run,
+        itemCount: report.items.length,
+        missingSkills: [],
+        items: report.items,
+      });
+      toast.success(dryRun ? t("agentportDiff.toasts.exportPlanned") : t("agentportDiff.toasts.exported"));
+      if (!dryRun) await refresh();
+    } catch (error) {
+      toast.error(getErrorMessage(error, t("agentportDiff.errors.export")));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const diff = status?.diff ?? null;
   const issueCount = useMemo(() => {
@@ -95,16 +150,16 @@ export function AgentPortDiff() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => navigate("/agentport")}
+            onClick={() => navigate("/agentport/artifacts")}
             className="app-button-secondary"
           >
             <FileCode2 className="h-4 w-4" />
-            {t("agentportDiff.actions.environment")}
+            {t("agentportDiff.actions.artifacts")}
           </button>
           <button
             type="button"
             onClick={refresh}
-            disabled={loading}
+            disabled={loading || Boolean(busy)}
             className="app-button-primary"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -129,6 +184,63 @@ export function AgentPortDiff() {
           );
         })}
       </div>
+
+      <section>
+        <h2 className="app-section-title mb-2.5">{t("agentportDiff.sections.resolve")}</h2>
+        <div className="app-panel px-4 py-4">
+          <div className="flex flex-wrap gap-2">
+            <ActionButton
+              label={t("agentportDiff.actions.planApply")}
+              busy={busy === "planApply"}
+              disabled={loading || Boolean(busy)}
+              onClick={() => void handleApplyProfile(true)}
+            />
+            <ActionButton
+              label={t("agentportDiff.actions.apply")}
+              busy={busy === "apply"}
+              disabled={loading || Boolean(busy)}
+              onClick={() => void handleApplyProfile(false)}
+              primary
+            />
+            <ActionButton
+              label={t("agentportDiff.actions.planExport")}
+              busy={busy === "planExport"}
+              disabled={loading || Boolean(busy)}
+              onClick={() => void handleExportResources(true)}
+            />
+            <ActionButton
+              label={t("agentportDiff.actions.export")}
+              busy={busy === "export"}
+              disabled={loading || Boolean(busy)}
+              onClick={() => void handleExportResources(false)}
+            />
+          </div>
+          {lastReport && (
+            <div className="mt-4 overflow-hidden rounded-md border border-border-subtle">
+              <DiffRow
+                title={t(`agentportDiff.report.${lastReport.kind}`)}
+                detail={lastReport.dryRun ? t("agentportDiff.report.planned") : t("agentportDiff.report.applied")}
+                meta={t("agentportDiff.report.itemCount", { count: lastReport.itemCount })}
+                ok={lastReport.ok && lastReport.missingSkills.length === 0}
+                tone={lastReport.ok ? undefined : "warning"}
+              />
+              {lastReport.missingSkills.slice(0, 6).map((skill) => (
+                <DiffRow key={skill} title={t("agentportDiff.report.missingSkill")} detail={skill} tone="warning" />
+              ))}
+              {lastReport.items.slice(0, 6).map((item) => (
+                <DiffRow
+                  key={`${item.id}:${item.target_path}`}
+                  title={item.status}
+                  detail={item.id}
+                  meta={item.error ?? compactPath(item.target_path)}
+                  ok={!item.error}
+                  tone={item.error ? "warning" : undefined}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       <section>
         <div className="mb-2.5 flex items-center justify-between gap-3">
@@ -175,6 +287,39 @@ export function AgentPortDiff() {
         </div>
       </section>
     </div>
+  );
+}
+
+function compactPath(path?: string | null) {
+  if (!path) return "";
+  return path
+    .replace(/\/Users\/[^/]+/, "~")
+    .replace(/\/home\/[^/]+/, "~");
+}
+
+function ActionButton({
+  label,
+  busy,
+  disabled,
+  onClick,
+  primary,
+}: {
+  label: string;
+  busy: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  primary?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={primary ? "app-button-primary" : "app-button-secondary"}
+    >
+      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+      {label}
+    </button>
   );
 }
 

@@ -174,6 +174,7 @@ export function Sidebar() {
     { name: t("sidebar.agentport"), path: "/agentport", icon: FileCode2 },
     { name: t("sidebar.agentportPackages"), path: "/agentport/packages", icon: Boxes },
     { name: t("sidebar.agentportProfiles"), path: "/agentport/profiles", icon: SlidersHorizontal },
+    { name: t("sidebar.agentportArtifacts"), path: "/agentport/artifacts", icon: FileCode2 },
     { name: t("sidebar.agentportDiff"), path: "/agentport/diff", icon: GitCompareArrows },
   ];
 
