@@ -499,21 +499,13 @@ export function Sidebar() {
 
         {/* Scrollable section */}
         <div className="px-2.5 flex-1 overflow-y-auto scrollbar-hide min-h-0">
+          {renderSectionHeading(t("sidebar.workspaces"))}
 
           {/* ── Presets ── */}
-          <div className="mb-1.5 px-2.5 flex items-center gap-1">
-            <button
-              onClick={() => setPresetsOpen((v) => !v)}
-              className="flex min-w-0 flex-1 items-center gap-1 text-left outline-none"
-            >
-              {presetsOpen
-                ? <ChevronDown className="h-3 w-3 shrink-0 text-faint" />
-                : <ChevronRight className="h-3 w-3 shrink-0 text-faint" />}
-              <span className="truncate text-[12px] font-semibold tracking-[0.01em] text-muted whitespace-nowrap">
-                {t("sidebar.presets")}
-              </span>
-            </button>
-          </div>
+          {renderSectionHeading(t("sidebar.presets"), {
+            isOpen: presetsOpen,
+            onToggle: () => setPresetsOpen((v) => !v),
+          })}
           {presetsOpen && (
             <>
               <DragDropContext onDragEnd={handleDragEnd}>
@@ -659,19 +651,10 @@ export function Sidebar() {
           <div className="mx-0.5 mt-3.5 mb-2.5 border-t border-border-subtle" />
 
           {/* ── Projects ── */}
-          <div className="mb-1.5 px-2.5 flex items-center gap-1">
-            <button
-              onClick={() => setProjectsOpen((v) => !v)}
-              className="flex min-w-0 flex-1 items-center gap-1 text-left outline-none"
-            >
-              {projectsOpen
-                ? <ChevronDown className="h-3 w-3 shrink-0 text-faint" />
-                : <ChevronRight className="h-3 w-3 shrink-0 text-faint" />}
-              <span className="truncate text-[12px] font-semibold tracking-[0.01em] text-muted whitespace-nowrap">
-                {t("sidebar.projects")}
-              </span>
-            </button>
-          </div>
+          {renderSectionHeading(t("sidebar.projects"), {
+            isOpen: projectsOpen,
+            onToggle: () => setProjectsOpen((v) => !v),
+          })}
           {projectsOpen && (
             <>
               <DragDropContext onDragEnd={handleProjectDragEnd}>
