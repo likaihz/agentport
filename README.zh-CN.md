@@ -2,10 +2,10 @@
   <img src="assets/icon.png" width="80" />
 </p>
 
-<h1 align="center">Skills Manager</h1>
+<h1 align="center">AgentPort</h1>
 
 <p align="center">
-  一个应用，统一管理所有 AI 编码工具的 Skills。
+  面向 AI coding agent、Skills、插件和工作区的可迁移环境管理器。
 </p>
 
 <p align="center">
@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/demo/library.png" width="800" alt="Skills Manager 技能库" />
+  <img src="assets/demo/library.png" width="800" alt="AgentPort 技能库" />
 </p>
 
 <p align="center"><strong>安装 Skills</strong></p>
@@ -31,40 +31,64 @@
 <p align="center"><strong>设置</strong></p>
 <p align="center"><img src="assets/demo/settings.png" width="800" alt="设置" /></p>
 
+## AgentPort 管什么
+
+AgentPort 按三层来组织，左侧导航也遵循这个模型。
+
+1. **资源库** — 可复用的 Skills 都放在中央库里。你可以从 Git、本地目录、压缩包或市场安装 Skills，然后打标签、预览、更新，并用 Git 备份。
+2. **Environment** — AgentPort 会把你的 agent 环境变成一份可迁移声明：Profile、Package 来源、Artifact、机器本地 overlay、漂移报告。Environment 对当前中央库来说是一个单例对象，不是多个环境的列表。
+3. **工作区** — 工作区是 Skills 真正被应用到 agent 的地方。全局工作区会改 agent 的全局 Skills 目录；项目工作区只改某个项目；Preset 是可复用的 Skills 分组，可以应用到二者。
+
+## 侧边栏导航地图
+
+| 侧边栏区域 | 页面 | 含义 |
+|------------|------|------|
+| **首页** | **首页** | 产品级控制台。汇总资源库、单例 Environment 和工作区状态，并把需要处理的下一步放到前面。 |
+| **资源库** | **Skills**、**安装 Skills** | 管理中央 Skills 库。安装、打标签、删除、更新、查看文档，都在这里完成。 |
+| **Environment** | **概览**、**Profiles**、**Packages**、**Artifacts**、**Machines**、**Diff** | 查看 AgentPort 准备在多台机器之间同步的单例环境。概览页初始化或重建 `agentport.yaml` / `agentport.lock`；Profiles 描述期望的 agent 配置；Packages 记录插件/来源归属；Artifacts 是被纳管的文件或资源；Machines 保存本机私有 overlay 和 secret 存在状态；Diff 显示本机和 manifest 的差异。 |
+| **工作区** | **Preset**、**全局工作区**、**项目工作区** | 把 Skills 应用到真实路径。Preset 是技能组；全局工作区面向每个 agent 的全局 Skills 目录；项目工作区面向某个项目里的 Skills 目录。 |
+| **设置** | **设置** | 配置 Agent 路径、同步模式、Git 远程、代理、主题、语言、更新、自定义工具和日志。 |
+
+如果你只想在一台电脑上管理 Skills，主要使用 **资源库** 和 **工作区** 就够了。若你想在多台电脑、多个工具（如 Claude Code、Codex、OpenCode、Gemini CLI）之间迁移同一套 agent 环境，就把 **Environment** 当作同步依据。
+
 ## 功能
 
-- **统一技能库** — 从 Git 仓库、本地目录、`.zip` / `.skill` 文件或 [skills.sh](https://skills.sh) 市场安装技能，统一存放在 `~/.skills-manager`。
-- **Preset（预设）** — 将技能分组为命名 Preset。在任意工作区点击 Preset 标签，即可一键为当前 Agent 范围激活或停用其全部技能，激活的 Preset 显示 ✓，部分安装显示数量。
-- **全局工作区** — 每个 Agent 都有自己的页面，列出其全局目录里的所有 Skills（包括不是通过 Skills Manager 安装的），始终反映 Agent 实际看到的内容。可按 Agent 添加或移除 Skills，也可通过「全部 Agents」总览跨所有已安装 Agent 统一管理。
-- **项目工作区** — 查看并管理任意项目的本地 Skills 目录，支持与中央库双向同步。支持嵌套 Skill 目录和导出时按 Agent 分配。
-- **关联工作区** — 将任意目录指定为 Skills 根目录，适合管理不在默认 Agent 路径下的 Skills。作为独立工作区管理，不参与全局 Preset 同步。
-- **多工具同步** — 一键将技能同步到任意支持的工具，支持软链接和复制两种模式。每张 Skill 卡片会为每个已启用 Agent 显示一个图标角标，点击角标即可直接在卡片上为该 Agent 安装或移除这个 Skill，角标会实时反映同步状态。
-- **「添加 Skills」弹层** — 任意工作区点击 **+ 添加 Skills** 即可打开统一的挑选弹层：搜索中央库，用始终可见的 Agent 标签切换目标（含一键全选/清空），一次提交批量添加多个 Skills。
-- **批量操作** — 多选技能后批量启用/禁用、导出或删除。项目工作区中的项目 Skills 也支持批量启用/禁用。
-- **技能标签** — 为技能添加标签，用于归类同类技能，并按来源或标签筛选；新增的 **未标签** 过滤项可快速定位漏打标签的 Skills。
-- **更新检查** — 为 Git 类技能检查远端更新；本地技能支持重新导入。
-- **文档预览** — 直接在应用内查看 `SKILL.md` / `README.md`。
-- **自定义工具** — 添加自定义 Agent/工具并指定 Skills 目录，也可覆盖内置工具的默认路径。
-- **Git 备份** — 用 Git 管理技能库，支持版本控制和多机同步。
-- **活动日志 & 导出日志** — 应用会记录本地的安装/移除/更新/同步操作。在 **设置 → 导出日志** 可把最近日志和活动记录打包成压缩文件，方便提交 Issue 时附上。
-- **灵活的应用设置** — 在一个页面里配置仓库路径、同步模式、主题、字号、语言、托盘行为、代理、Git 远程、更新检查，以及 Agent 在全应用中的显示顺序。
+- **统一技能库** — 从 Git 仓库、本地目录、`.zip` / `.skill` 文件或 [skills.sh](https://skills.sh) 市场安装技能，统一进入中央库，默认路径为 `~/.skills-manager`，也可在 **设置** 中修改。
+- **AgentPort 环境同步** — 为 Skills、插件/Package、被纳管 Artifact、Profile 和机器本地 overlay 生成可迁移环境元数据，并支持预览/应用。
+- **市场与 AI 搜索** — 浏览市场热门 Skills、关键词搜索，或配置 SkillsMP API Key 后使用 AI 搜索。
+- **Preset（预设）** — 将技能分组为命名 Preset。在任意工作区点击 Preset 标签，即可为当前 Agent 范围激活或停用其全部技能。
+- **全局工作区** — 每个 Agent 都有自己的页面，列出其全局目录里的所有 Skills，包括不是通过 AgentPort 安装的内容，始终反映 Agent 实际看到的状态。
+- **项目工作区** — 查看并管理任意项目的本地 Skills 目录，支持与中央库双向同步，适合项目专属能力。
+- **多工具同步** — 支持用软链接或复制方式把 Skills 同步到已支持工具。Skill 卡片上的 Agent 图标可一键安装或移除该 Skill。
+- **Package 与来源追踪** — 记录 Skills 和 Artifacts 的来源，包括插件拥有的 package、市场安装内容，以及 vendored 到中央库的本地 Skill。
+- **机器本地安全边界** — 私有路径、secret 和本机专属 overlay 不进入共享 manifest，但会记录是否存在，方便迁移后补齐。
+- **漂移与 copy target 修复** — 对比本机状态和共享 manifest，预览 apply/export 操作，并对被 agent 修改过的 copy target 执行回流或丢弃。
+- **技能标签** — 为 Skills 添加标签，用于归类和筛选；**未标签** 过滤项可快速定位漏打标签的 Skills。
+- **Git 备份与恢复** — 用 Git 管理技能库，支持版本控制、多机同步和快照恢复。
+- **自定义工具** — 添加自定义 Agent/工具并指定 Skills 目录，也可覆盖内置工具默认路径。
+- **活动日志 & 导出日志** — 应用会记录本地安装/移除/更新/同步操作。在 **设置 → 导出日志** 可打包最近日志和活动记录，方便提交 Issue。
 
 ## 核心概念
 
-- **Preset 是可复用的 Skills 分组** — Preset 是一组命名的 Skills 集合。在任意工作区激活 Preset，即可将其所有 Skills 添加到选定 Agent；停用则反向移除。应用 Preset 是一次性复制，不是实时同步。
-- **全局工作区管理每个 Agent 的全局 Skills** — 每个已安装 Agent 都有自己的全局 Skills 目录（如 Claude Code 对应 `~/.claude/skills/`）。每个 Agent 页面会列出该目录里的所有内容（包括不是通过 Skills Manager 安装的 Skills），可以添加、移除或纳入管理；「全部 Agents」总览则跨 Agent 统一管理。
+- **Skill 是可复用的 agent 能力** — 一个 Skill 通常是包含 `SKILL.md` 和辅助文件的目录，可以来自 Git、本地目录、压缩包或市场。
+- **Preset 是可复用的 Skills 分组** — Preset 是一组命名的 Skills 集合。在任意工作区激活 Preset，即可将其所有 Skills 添加到选定 Agent；停用则反向移除。应用 Preset 是一次性操作，不是实时订阅。
+- **Profile 描述期望的 agent 状态** — Profile 表达“哪些 agent 应该拥有哪些 Skills 和资源”，由 Preset 和 AgentPort 元数据生成。
+- **Package 描述来源归属** — Package 记录一组 Skills/Artifacts 来自哪里，例如插件仓库、市场 package，或导入的本地来源。
+- **Artifact 是被纳管的文件或资源** — Skill 是一种 Artifact。AgentPort 也可以建模 commands、hooks、配置片段等 agent 相关资源。
+- **Machine 保存本机私有数据** — Machine overlay 保存私有路径、本地来源、secret 存在状态，不把敏感信息放进共享 manifest。
+- **全局工作区管理每个 Agent 的全局 Skills** — 每个已安装 Agent 都有自己的全局 Skills 目录（如 Claude Code 对应 `~/.claude/skills/`）。每个 Agent 页面会列出该目录里的所有内容，包括不是通过 AgentPort 安装的 Skills。
 - **项目工作区是项目专属 Skills 集合** — 项目工作区管理某个项目里的本地 Skills（如 `<project>/.claude/skills/`），只对该项目生效。
-- **标签用于归类和筛选** — 给同类 Skills 打上相同标签后，可以按标签快速筛选出需要的一组 Skills。
-- **批量操作随处可用** — 在任意工作区多选 Skills，进行批量操作。
+- **Diff 告诉你哪里变了** — 在迁移电脑、应用 Profile、或 agent 直接修改 copy target 后，先看 Diff 再决定 apply/export。
 
 ## 快速上手
 
-1. 从本地目录、Git 仓库、压缩包或市场安装 Skills。如有 SkillsMP API Key，还可开启 AI 搜索。
-2. 从侧边栏进入 **全局工作区**，选择一个 Agent（如 Claude Code）。
-3. 点击 **Preset** 标签为该 Agent 一键激活对应 Skills，或点 **+ 添加 Skills** 从技能库挑选并即时切换目标 Agent。激活的 Preset 显示 ✓，部分安装显示计数角标。
-4. 如需管理项目本地 Skills，打开 **项目工作区**，同样使用 Preset 标签，或通过 **+ 添加 Skills** 弹层用多 Agent 目标选择器挑选。
-5. 在 **设置** 中配置 Agent 路径、自定义工具、主题、语言、代理和 Git 偏好。
-6. 如果需要历史版本或多机同步，先在 **设置** 保存 Git 远程地址，再到 **技能库** 执行 **开始备份** 或 **同步到 Git**。
+1. 打开 **安装 Skills**，从本地目录、Git 仓库、压缩包或市场导入 Skills。
+2. 打开 **Skills** 查看中央库，给 Skills 打标签、查看文档，并决定哪些 Skills 应该放在一起。
+3. 创建或选择一个 **Preset**，比如 default coding、review、frontend。
+4. 打开 **全局工作区**，选择 Claude Code、Codex、OpenCode、Gemini CLI 等 Agent，应用 Preset 或用 **+ 添加 Skills** 单独添加。
+5. 如果某些能力只应该在一个项目里生效，关联 **项目工作区**，把 Skills 应用到该项目而不是全局。
+6. 如果要多机同步，打开 **Environment → 概览** 初始化或重建 AgentPort manifest，再检查 **Profiles**、**Packages**、**Artifacts**、**Machines** 和 **Diff**。
+7. 在 **设置** 中配置 Git，然后回到 **Skills** 执行 **同步到 Git**，把中央库备份并迁移到其他电脑。
 
 ## Git 备份
 
@@ -74,14 +98,14 @@
 
 1. 创建一个私有仓库（推荐）。
 2. 打开 **设置 → Git 同步配置**，保存远程仓库地址。
-3. 打开 **技能库** 页面。
+3. 打开 **Skills** 页面。
 4. 二选一：
 - 已有远程仓库：点击 **开始备份**，按已配置地址克隆。
 - 首次本地初始化：点击 **开始备份** 初始化本地仓库，再使用 **同步到 Git**。
-5. 在技能库顶部工具栏点击 **同步到 Git**。
+5. 在 Skills 顶部工具栏点击 **同步到 Git**。
 
 `同步到 Git` 会根据仓库状态自动处理拉取/提交/推送。
-每次同步成功会自动创建一个快照版本标签。你可以在技能库中打开 **版本历史**，并将任意快照恢复为一条新的提交。
+每次同步成功会自动创建一个快照版本标签。你可以在 **Skills** 中打开 **版本历史**，并将任意快照恢复为一条新的提交。
 
 ### 认证说明
 
@@ -98,7 +122,7 @@ Cursor · Claude Code · Codex · OpenCode · Amp · Kilo Code · Roo Code · Go
 
 ## 应用内帮助
 
-设置页中的 **帮助** 按钮会展示与上面一致的快速流程：推荐工作流、Preset、安装 Skills、技能库（含「未标签」筛选与卡片删除按钮）、全局工作区与 **+ 添加 Skills** 弹层、项目工作区的多 Agent 目标选择器、Git 备份，以及环境设置（含「导出日志」用于 Issue 反馈），方便用户不离开应用也能快速理解使用方式。
+设置页中的 **帮助** 按钮会展示与上面一致的产品流程：侧边栏模型、推荐工作流、Preset、安装 Skills、技能库、单例 Environment、全局工作区与 **+ 添加 Skills** 弹层、项目工作区、Git 备份，以及环境设置。它可以理解为 README 的应用内版本。
 
 ## 技术栈
 
@@ -127,25 +151,58 @@ npm run tauri:dev
 
 ### CLI
 
-仓库现在包含一个面向 agent 的 CLI，而且它是建立在与桌面应用共用的 Rust shared core 之上。也就是：repo 初始化、tool 解析、scenario 同步/应用逻辑，以及 metadata reindex，都被抽到了可复用 core 模块中，而不是另外在 CLI 里重写一份。
+仓库包含一个面向 agent 的 CLI，它与桌面应用复用同一套 Rust shared core。桌面应用和 CLI 会经过同一个 SQLite 数据库、中央技能库和同步引擎。
 
 ```bash
-# 查看当前仓库路径和统计信息
+# 查看仓库 / 技能库状态
 npm run cli -- repo status
-
-# 列出技能 / 查看单个技能
 npm run cli -- skills list
 npm run cli -- skills show db
 
-# 用 shared core 预览或应用某个 scenario
-npm run cli -- scenarios list
-npm run cli -- scenarios preview Default
-npm run cli -- scenarios apply Default
+# 安装 Skills（默认只进入中央库，不会同步到 Agent）
+npm run cli -- skills install ./my-skill                       # 本地路径
+npm run cli -- skills install https://github.com/foo/bar.git   # Git URL
+npm run cli -- skills install vercel-labs/agent-skills@react-best-practices  # skills.sh
+npm run cli -- skills install foo/bar --sync                   # 加入当前 Preset 并同步到 Agent
 
-# 导出单个技能到其他 agent 工作目录
+# 从上游更新 / 检查更新
+npm run cli -- skills update --all
+npm run cli -- skills check --all
+
+# 搜索 skills.sh 市场（无需 API Key）
+npm run cli -- skills search react --limit 5
+
+# 删除（需要 --yes；支持 --dry-run）
+npm run cli -- skills remove <ref> --dry-run
+npm run cli -- skills remove <ref> --yes
+
+# 通过修改 Preset 成员来启用 / 停用 Skills
+npm run cli -- presets add-skill <preset> <ref>
+npm run cli -- presets remove-skill <preset> <ref>
+
+# 将当前 Preset 同步到启用的 Agents
+npm run cli -- skills sync --dry-run
+npm run cli -- skills sync --tool claude_code
+
+# 纳管已经存在于 Agent 目录中的 Skills（如 ~/.claude/skills/）
+npm run cli -- skills adopt ~/.claude/skills --dry-run
+npm run cli -- skills adopt ~/.claude/skills
+
+# 标签
+npm run cli -- skills tag add <ref> web frontend
+npm run cli -- skills tag list
+
+# Presets
+npm run cli -- presets list
+npm run cli -- presets preview Default
+npm run cli -- presets apply Default
+npm run cli -- presets add-skill <preset> <skill>
+npm run cli -- presets remove-skill <preset> <skill>
+
+# 一次性导出单个 Skill 到任意目录（非托管）
 npm run cli -- skills export db --dest ~/.claude/skills/db
 
-# 查看或同步 git 管理的 skills 仓库
+# Git 管理的 skills 仓库
 npm run cli -- git status
 npm run cli -- git pull
 npm run cli -- git commit -m "chore: update skills"
@@ -154,12 +211,12 @@ npm run cli -- git commit -m "chore: update skills"
 可用命令分组：
 - `repo`：查看或修改当前 base directory
 - `tools`：列出已检测到的工具目标与路径
-- `skills`：列出、查看、导出技能
-- `scenarios`：列出 scenario、预览同步目标，或将某个 scenario 应用到默认工具路径
+- `skills`：管理中央技能库中的 Skills（`list / show / install / update / check / remove / enable / disable / sync / search / adopt / tag / export`）
+- `presets`：列出 Preset，预览 / 应用 Preset，向 Preset 添加或移除 Skills
 - `git`：操作 git 管理的 `skills/` 仓库（`clone`、`pull`、`push`、`commit`、`versions`、`restore`）
 
 额外参数：
-- `--skills-root <path>`：直接针对某个已 clone / 已导出的 skills repo 操作，而不是本机 app 默认目录。manager 的状态（DB、scenarios、cache、logs）会落在 `~/.skills-manager/external/<name>-<hash>/`，按 skills root 的规范化路径分目录隔离，外部仓库本身保持干净。
+- `--skills-root <path>`：直接针对某个已 clone / 已导出的 skills repo 操作，而不是本机 app 默认目录。manager 的状态（DB、Presets、cache、logs）会落在 `~/.skills-manager/external/<name>-<hash>/`，按 skills root 的规范化路径分目录隔离，外部仓库本身保持干净。
 - `--json`：给脚本 / agent 使用的机器可读输出
 
 ```bash
@@ -180,7 +237,7 @@ npm run cli:install
 
 #### 与桌面应用并发使用
 
-CLI 和桌面应用共享同一个 SQLite 数据库。SQLite 会串行化写入，所以数据是安全的，但运行中的应用不会自动刷新它的内存缓存 —— 在 CLI 跑完 `scenarios apply`、`git pull` 等会改状态的命令后，重启应用或手动刷新一次。
+CLI 和桌面应用共享同一个 SQLite 数据库。SQLite 会串行化写入，所以数据是安全的，但运行中的应用不会自动刷新它的内存缓存 —— 在 CLI 跑完 `presets apply`、`git pull` 等会改状态的命令后，重启应用或手动刷新一次。
 
 ### 构建
 
@@ -193,7 +250,7 @@ npm run cli:build
 
 ### macOS 首次启动被 Gatekeeper 拦截
 
-Skills Manager 使用 ad-hoc 签名，未做 Apple 公证（没有付费的 Apple Developer ID），所以首次打开会被 macOS Gatekeeper 提示。
+AgentPort 使用 ad-hoc 签名，未做 Apple 公证（没有付费的 Apple Developer ID），所以首次打开会被 macOS Gatekeeper 提示。
 
 - **"无法打开，因为无法验证开发者"**（v1.20.0 及之后版本）—— 在访达里右键点击应用，选择 **打开**，再在弹窗里确认即可。也可以打开 **系统设置 → 隐私与安全性**，第一次启动失败后会出现 **仍要打开** 按钮。
 - **"应用已损坏，无法打开"**（v1.19.0 及之前版本）—— 在终端执行下面这条命令后重新打开应用即可：

@@ -4,15 +4,16 @@
   },
   "sidebar": {
     "overview": "總覽",
-    "dashboard": "Dashboard",
+    "home": "首頁",
+    "dashboard": "首頁",
     "environment": "Environment",
     "library": "資源庫",
     "mySkills": "Skills",
     "globalWorkspace": "全域工作區",
     "lobsterAgents": "龍蝦 Agent",
     "installSkills": "安裝 Skills",
-    "environmentModel": "環境模型",
-    "agentport": "Environment",
+    "agentport": "環境概覽",
+    "agentportOverview": "概覽",
     "agentportPackages": "Packages",
     "agentportProfiles": "Profiles",
     "agentportArtifacts": "Artifacts",
@@ -27,8 +28,8 @@
   },
   "help": {
     "eyebrow": "操作指南",
-    "title": "快速上手 Skills Manager",
-    "description": "最快路徑：安裝 Skills → 開啟全域工作區 → 點擊 Preset 標籤啟用。按 ⌘K 可隨時呼出命令面板。按需使用專案工作區、Git 備份和設定。",
+    "title": "快速上手 AgentPort",
+    "description": "最快路徑：安裝 Skills → 查看首頁 → 在工作區套用 Skills。需要跨 Agent 或跨機器遷移時，再使用 Environment。",
     "items": {
       "workflows": {
         "title": "推薦工作流程",
@@ -48,7 +49,7 @@
       },
       "global": {
         "title": "全域工作區",
-        "description": "每個 Agent 都有自己的頁面，列出其全域目錄裡的所有 Skills（包括不是透過 Skills Manager 安裝的），與 Agent 實際看到的內容保持一致。點 + 新增 Skills 即可從中央庫挑選，並透過內嵌的 Agent 標籤選擇目標；也可透過「全部 Agents」總覽跨所有已安裝 Agent 統一管理。只存在於某個 Agent 目錄的 Skills 可直接在卡片上刪除。"
+        "description": "每個 Agent 都有自己的頁面，列出其全域目錄裡的所有 Skills（包括不是透過 AgentPort 安裝的），與 Agent 實際看到的內容保持一致。點 + 新增 Skills 即可從中央庫挑選，並透過內嵌的 Agent 標籤選擇目標；也可透過「全部 Agents」總覽跨所有已安裝 Agent 統一管理。只存在於某個 Agent 目錄的 Skills 可直接在卡片上刪除。"
       },
       "projects": {
         "title": "專案工作區",
@@ -79,16 +80,52 @@
     }
   },
   "dashboard": {
-    "greeting": "你好！",
-    "summary": "Library 中 {{skills}} 個 Skills · 已接入 {{agents}} 個 Agent · {{projects}} 個 Project",
-    "librarySkills": "Library Skills",
-    "syncCoverage": "同步覆蓋",
-    "connectedAgents": "已接入 Agent",
-    "synced": "已同步",
-    "notSynced": "未同步",
-    "scanImport": "掃描本機 Skills 匯入",
-    "installNew": "安裝新 Skills",
-    "recentActivity": "近期動態"
+    "title": "首頁",
+    "summary": "環境 {{environment}} · {{skills}} 個 Skills · {{agents}} 個 Agents · {{projects}} 個 Projects",
+    "refresh": "重新整理",
+    "environment": {
+      "loading": "檢查中",
+      "ready": "已就緒",
+      "needsInit": "需要初始化",
+      "needsReview": "需要檢查"
+    },
+    "cards": {
+      "environment": "Environment",
+      "environmentDetail": "{{profiles}} 個 Profiles · {{packages}} 個 Packages · {{artifacts}} 個 Artifacts · {{issues}} 個問題",
+      "library": "資源庫",
+      "skillCount": "{{count}} 個 Skills",
+      "libraryDetail": "{{synced}} 個已同步 · {{updates}} 個可更新 · {{untagged}} 個未標籤",
+      "workspaces": "工作區",
+      "agentProjectCount": "{{agents}} 個 Agents · {{projects}} 個 Projects",
+      "workspaceDetail": "{{issues}} 個專案同步問題"
+    },
+    "attention": {
+      "title": "需要處理",
+      "environmentMissing": "Environment manifest 缺失",
+      "environmentMissingDetail": "先初始化這個單例環境，再進行多機同步。",
+      "environmentReview": "Environment 需要檢查",
+      "environmentReviewDetail": "{{count}} 個 manifest 警告或 diff 問題",
+      "skillUpdates": "有 Skill 可更新",
+      "skillUpdatesDetail": "{{count}} 個 Skill 可從來源更新",
+      "projectDrift": "專案工作區存在漂移",
+      "projectDriftDetail": "{{count}} 個專案 Skill 同步問題",
+      "noAgents": "沒有啟用的 Agent",
+      "noAgentsDetail": "在設定中至少啟用一個 coding agent 目標。",
+      "noSkills": "資源庫裡還沒有 Skills",
+      "noSkillsDetail": "安裝或匯入 Skills 後，就可以開始組織 agent 環境。",
+      "clear": "目前沒有需要處理的問題",
+      "clearDetail": "資源庫、Environment 和工作區目前沒有阻塞項。"
+    },
+    "quickActions": "快捷操作",
+    "actions": {
+      "install": "安裝 Skills",
+      "scan": "掃描本機",
+      "environment": "Environment",
+      "diff": "Diff"
+    },
+    "recentSkills": "近期 Skills",
+    "skillSynced": "已同步到 {{tools}}",
+    "skillNotSynced": "未同步"
   },
   "agentport": {
     "title": "AgentPort",
@@ -727,7 +764,7 @@
     "language": "語言",
     "help": "說明",
     "about": "關於",
-    "version": "Skills Manager 1.22.1",
+    "version": "AgentPort 1.22.1",
     "tagline": "跨平台。極簡、高效、無感多 Preset 切換。",
     "checkUpdate": "檢查更新",
     "checking": "檢查中…",
@@ -747,7 +784,7 @@
     "exportLogsHint": "把最近日誌和操作紀錄打包成 zip 儲存到下載資料夾",
     "exportLogsDone": "已匯出日誌（{{count}} 個檔案），請把 zip 拖到 GitHub issue 附件區。",
     "exportLogsFailed": "匯出日誌失敗。",
-    "panicBanner": "上次執行 Skills Manager 時發生崩潰（{{time}}）。",
+    "panicBanner": "上次執行 AgentPort 時發生崩潰（{{time}}）。",
     "panicDismiss": "忽略",
     "gitBackup": "Git 同步",
     "gitBackupDesc": "將 Skill 庫備份到 Git 倉庫，支援版本管理和多機同步。",

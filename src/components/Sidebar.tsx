@@ -78,8 +78,10 @@ export function Sidebar() {
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [globalWorkspaceOpen, setGlobalWorkspaceOpen] = useState(true);
   const [lobsterWorkspaceOpen, setLobsterWorkspaceOpen] = useState(true);
-  const [environmentModelOpen, setEnvironmentModelOpen] = useState(() => {
-    const stored = localStorage.getItem("agentport:sidebar:environment-model-open");
+  const [environmentOpen, setEnvironmentOpen] = useState(() => {
+    const stored =
+      localStorage.getItem("agentport:sidebar:environment-open") ??
+      localStorage.getItem("agentport:sidebar:environment-model-open");
     return stored === null ? true : stored === "true";
   });
 
@@ -97,10 +99,10 @@ export function Sidebar() {
   useEffect(() => { setOrderedProjects(projects); }, [projects]);
   useEffect(() => {
     localStorage.setItem(
-      "agentport:sidebar:environment-model-open",
-      String(environmentModelOpen)
+      "agentport:sidebar:environment-open",
+      String(environmentOpen)
     );
-  }, [environmentModelOpen]);
+  }, [environmentOpen]);
   useEffect(() => {
     const stored = localStorage.getItem("skills-manager:tool-order");
     const storedOrder: string[] = stored ? JSON.parse(stored) : [];
@@ -185,9 +187,8 @@ export function Sidebar() {
     icon: LucideIcon;
   };
 
-  const overviewItems: StaticNavItem[] = [
-    { name: t("sidebar.dashboard"), path: "/", icon: LayoutDashboard },
-    { name: t("sidebar.agentport"), path: "/agentport", icon: FileCode2 },
+  const homeItems: StaticNavItem[] = [
+    { name: t("sidebar.home"), path: "/", icon: LayoutDashboard },
   ];
 
   const libraryItems: StaticNavItem[] = [
@@ -195,7 +196,8 @@ export function Sidebar() {
     { name: t("sidebar.installSkills"), path: "/install", icon: Download },
   ];
 
-  const environmentModelItems: StaticNavItem[] = [
+  const environmentItems: StaticNavItem[] = [
+    { name: t("sidebar.agentportOverview"), path: "/agentport", icon: FileCode2 },
     { name: t("sidebar.agentportProfiles"), path: "/agentport/profiles", icon: SlidersHorizontal },
     { name: t("sidebar.agentportPackages"), path: "/agentport/packages", icon: Boxes },
     { name: t("sidebar.agentportArtifacts"), path: "/agentport/artifacts", icon: FileCode2 },
@@ -477,8 +479,7 @@ export function Sidebar() {
 
         {/* Primary navigation */}
         <div className="px-2.5 shrink-0">
-          {renderSectionHeading(t("sidebar.overview"))}
-          {renderStaticNavItems(overviewItems)}
+          {renderStaticNavItems(homeItems)}
 
           <div className="mx-0.5 mt-3.5 mb-2.5 border-t border-border-subtle" />
 
@@ -487,11 +488,11 @@ export function Sidebar() {
 
           <div className="mx-0.5 mt-3.5 mb-2.5 border-t border-border-subtle" />
 
-          {renderSectionHeading(t("sidebar.environmentModel"), {
-            isOpen: environmentModelOpen,
-            onToggle: () => setEnvironmentModelOpen((v) => !v),
+          {renderSectionHeading(t("sidebar.environment"), {
+            isOpen: environmentOpen,
+            onToggle: () => setEnvironmentOpen((v) => !v),
           })}
-          {environmentModelOpen && renderStaticNavItems(environmentModelItems)}
+          {environmentOpen && renderStaticNavItems(environmentItems)}
         </div>
 
         {/* Divider */}

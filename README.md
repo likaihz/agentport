@@ -2,10 +2,10 @@
   <img src="assets/icon.png" width="80" />
 </p>
 
-<h1 align="center">Skills Manager</h1>
+<h1 align="center">AgentPort</h1>
 
 <p align="center">
-  One app to manage AI agent skills across all your coding tools.
+  A portable environment manager for AI coding agents, skills, plugins, and workspaces.
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/demo/library.png" width="800" alt="Skills Manager Library" />
+  <img src="assets/demo/library.png" width="800" alt="AgentPort Skills Library" />
 </p>
 
 <p align="center"><strong>Install Skills — Marketplace</strong></p>
@@ -35,24 +35,42 @@
 <p align="center"><strong>Settings</strong></p>
 <p align="center"><img src="assets/demo/settings.png" width="800" alt="Settings" /></p>
 
+## What AgentPort Manages
+
+AgentPort is organized around three layers. The sidebar follows this same model.
+
+1. **Library** — Your reusable skills live in one central library. Install skills from Git repos, local folders, archives, or the marketplace, then tag, preview, update, and back them up with Git.
+2. **Environment** — AgentPort turns your agent setup into one portable environment declaration: profiles, package provenance, resource artifacts, machine-local overlays, and drift reports. The Environment is a singleton for the current central repo, not a list of separate environments.
+3. **Workspaces** — Workspaces are where skills are applied. A global workspace changes an agent's global skills directory; a project workspace changes skills inside one project; presets are reusable groups you can apply to either.
+
+## Sidebar Guide
+
+| Sidebar section | Pages | What it means |
+|-----------------|-------|---------------|
+| **Home** | **Home** | Product-level command center. It summarizes the Library, the singleton Environment, and Workspaces, then points to the next action that needs attention. |
+| **Library** | **Skills**, **Install Skills** | Manage the central reusable skill library. Use this when you are installing, tagging, deleting, updating, or inspecting skills. |
+| **Environment** | **Overview**, **Profiles**, **Packages**, **Artifacts**, **Machines**, **Diff** | Inspect the singleton environment AgentPort will sync across machines. Overview initializes or rebuilds `agentport.yaml` / `agentport.lock`; Profiles describe desired agent state; Packages record plugin/source ownership; Artifacts are managed files/resources; Machines keeps local-only overlays and secret presence; Diff shows what changed on this machine. |
+| **Workspaces** | **Presets**, **Global Workspace**, **Project Workspaces** | Apply skills to real agent locations. Presets are reusable groups, Global Workspace targets each agent's global skills folder, and Project Workspaces target per-project skill folders. |
+| **Settings** | **Settings** | Configure agent paths, sync mode, Git remote, proxy, theme, language, updates, custom tools, and logs. |
+
+If you only want to manage skills on one computer, you can mostly use **Library** and **Workspaces**. If you want the same agent environment on multiple computers or across tools like Claude Code, Codex, OpenCode, and Gemini CLI, use **Environment** as the source of truth.
+
 ## Features
 
 - **Unified skill library** — Install skills from Git repos, local folders, `.zip` / `.skill` archives, or the [skills.sh](https://skills.sh) marketplace. Everything goes into one central repo, which defaults to `~/.skills-manager` and can be customized in **Settings**.
+- **AgentPort environment sync** — Generate and apply portable environment metadata for skills, plugins/packages, managed artifacts, profiles, and machine-local overlays.
 - **Marketplace + AI search** — Browse popular skills from the marketplace, run keyword search, or enable SkillsMP AI search with your API key.
-- **Presets** — Group skills into named presets. In any workspace, click a preset pill to instantly activate or deactivate all its skills for the current agent scope. The sidebar lists all presets for quick access.
-- **Global Workspace** — Each agent gets its own page listing every skill in its global folder — including ones installed outside Skills Manager — so the view always reflects what the agent actually sees. Add or remove skills per agent, or use the All Agents overview to manage every installed agent at once.
-- **Project Workspaces** — View and manage project-local skill folders for supported agents, compare them with your central library, and sync changes in either direction. Supports nested skill directories and per-agent assignment when exporting.
-- **Linked Workspaces** — Point to any directory as a skills root — useful for skills that live outside the default agent paths. Managed as a standalone workspace without participating in global preset sync.
-- **Multi-tool sync** — Sync skills to any supported tool via symlink or copy with a single click. Every skill card shows an agent icon badge per enabled agent — click a badge to install or remove that skill for that agent right from the card, with the badge reflecting live sync state.
-- **Add from Library sheet** — In any workspace, click **+ Add Skills** to open a unified picker: search your central library, toggle target agents with always-visible chips (with select-all/clear), and batch-add multiple skills in one click.
-- **Batch operations** — Multi-select skills for bulk enable/disable, export, or delete. Project Workspaces also support bulk enable/disable for project-local skills.
-- **Skill tagging and filters** — Tag skills, use tags to group similar skills, and filter by source or tag — including an **Untagged** pill to quickly find skills missing labels.
-- **Update tracking** — Check for upstream updates on Git-based skills; re-import local ones.
-- **Skill preview and source inspection** — Read `SKILL.md` / `README.md`, inspect source metadata, and compare local content with the upstream version inside the app.
-- **Custom tools** — Add your own agents/tools with custom skills directories, or override the default path for any built-in tool.
+- **Presets** — Group skills into named presets. In any workspace, click a preset pill to activate or deactivate all its skills for the current agent scope.
+- **Global Workspace** — Each agent gets its own page listing every skill in its global folder, including skills installed outside AgentPort, so the view reflects what the agent actually sees.
+- **Project Workspaces** — View and manage project-local skill folders for supported agents, compare them with your central library, and sync changes in either direction.
+- **Multi-tool sync** — Sync skills to supported tools via symlink or copy. Skill cards show agent badges that can install or remove that skill for an agent in one click.
+- **Packages and provenance** — Track where skills and artifacts came from, including plugin-owned packages and local skills that have been vendored into the central library.
+- **Machine-aware safety** — Keep machine-local paths and secrets out of shared state while still recording whether required local overlays exist.
+- **Drift and copy-target repair** — Compare this machine with the shared manifest, preview apply/export actions, and pull or discard changed copy targets.
+- **Skill tagging and filters** — Tag skills, use tags to group similar skills, and filter by source or tag, including an **Untagged** filter.
 - **Git backup and restore** — Version-control your skill library with Git for backup and multi-machine sync, then restore snapshot versions from Version History when needed.
-- **Activity log & Export Logs** — Install / remove / update / sync operations are recorded locally. Use **Settings → Export Logs** to bundle recent logs and activity history into a single zip for easier issue reports.
-- **Flexible app settings** — Configure repo path, sync mode, theme, text size, language, tray behavior, proxy, Git remote, update checks, and the order agents appear throughout the app — all in one place.
+- **Custom tools** — Add your own agents/tools with custom skills directories, or override the default path for any built-in tool.
+- **Activity log & Export Logs** — Install / remove / update / sync operations are recorded locally. Use **Settings → Export Logs** to bundle recent logs and activity history into a single zip for issue reports.
 
 ## Core Concepts
 
@@ -60,20 +78,25 @@
   <img src="assets/diagram-concept-map.png" width="640" alt="Concept map: Library, Preset, Global Workspace, Project Workspace, Agent" />
 </p>
 
-- **Presets are reusable skill groups** — A preset is a named collection of skills. Activate a preset in any workspace to add all its skills to the selected agents; deactivate to remove them. Applying a preset is a one-time copy — not a live sync.
-- **Global Workspace manages per-agent global skills** — Each installed agent has its own global skills folder (e.g. `~/.claude/skills/` for Claude Code). Each agent page lists everything in that folder — even skills installed without Skills Manager — so you can add, remove, or adopt them; the All Agents overview manages every agent at once.
-- **Project Workspaces are project-local skill sets** — A project workspace manages the skills that live inside a specific project (e.g. `<project>/.claude/skills/`). Skills added here only apply to that project.
-- **Tags are for grouping and filtering** — Use tags to label similar skills, then filter by tag to find the subset you want quickly.
-- **Batch control works everywhere** — Multi-select skills in any workspace for bulk operations.
+- **Skills are reusable agent capabilities** — A skill is usually a folder with a `SKILL.md` file and supporting files. Skills can be installed from Git, local folders, archives, or marketplaces.
+- **Presets are reusable skill groups** — A preset is a named collection of skills. Activate a preset in any workspace to add all its skills to the selected agents; deactivate to remove them. Applying a preset is a one-time operation, not a live subscription.
+- **Profiles describe desired agent state** — A profile is the portable form of "which agents should have which skills and resources". Profiles are generated from your presets and AgentPort metadata.
+- **Packages describe source ownership** — A package records where a group of skills/artifacts came from, such as a plugin repo, marketplace package, or imported local source.
+- **Artifacts are managed files/resources** — Skills are one type of artifact. AgentPort can also model related resources such as commands, hooks, config snippets, and other agent-specific files.
+- **Machines keep local-only data local** — Machine overlays store private paths, local origins, and secret presence separately from shared manifest data.
+- **Global Workspace manages per-agent global skills** — Each installed agent has its own global skills folder (e.g. `~/.claude/skills/` for Claude Code). Each agent page lists everything in that folder, even skills installed without AgentPort.
+- **Project Workspaces are project-local skill sets** — A project workspace manages skills inside a specific project (e.g. `<project>/.claude/skills/`). Skills added here only apply to that project.
+- **Diff tells you what changed** — Use Diff before applying or exporting environment changes, especially when moving between computers or after editing skills through an agent.
 
 ## Quick Start
 
-1. Install skills from local folders, Git repositories, archives, or the marketplace. If you have a SkillsMP API key, you can also turn on AI search.
-2. Open **Global Workspace** from the sidebar and pick an agent (e.g. Claude Code).
-3. Click a **Preset** pill to activate its skills for that agent, or use **+ Add Skills** to pick from your library and toggle target agents inline. Active presets show a ✓; partial installs show a count badge.
-4. To manage project-local skills, open a **Project Workspace** and use the same preset pills or the **+ Add Skills** picker with its multi-agent target selector.
-5. Configure agent paths, custom tools, theme, language, proxy, and Git preferences in **Settings**.
-6. If you want history or multi-machine sync, set a Git remote in **Settings** and run **Start Backup** or **Sync to Git** from the **Library**.
+1. Open **Install Skills** and import skills from local folders, Git repositories, archives, or the marketplace.
+2. Open **Skills** to review your central library. Add tags, inspect docs, and decide which skills belong together.
+3. Create or select a **Preset** for a reusable group, such as "default coding", "review", or "frontend".
+4. Open **Global Workspace** and pick an agent such as Claude Code, Codex, OpenCode, or Gemini CLI. Apply a preset or use **+ Add Skills** to add individual skills.
+5. For project-only behavior, link a **Project Workspace** and apply skills there instead of globally.
+6. For multi-machine sync, open **Environment → Overview**, initialize/rebuild the AgentPort manifest, then inspect **Profiles**, **Packages**, **Artifacts**, **Machines**, and **Diff**.
+7. Configure Git in **Settings**, then use **Sync to Git** from **Skills** to back up and move the central library between computers.
 
 ## Git Backup
 
@@ -83,14 +106,14 @@ Back up the `skills/` folder inside your current central repository to a Git rep
 
 1. Create a private repository (recommended).
 2. Open **Settings → Git Sync Configuration** and save your remote URL.
-3. Open **Library**.
+3. Open **Skills**.
 4. Choose one:
 - Existing remote: click **Start Backup** to clone from the configured remote.
 - New local repo: click **Start Backup** to initialize locally, then use **Sync to Git**.
-5. Use **Sync to Git** from the Library toolbar.
+5. Use **Sync to Git** from the Skills toolbar.
 
 `Sync to Git` automatically handles pull, commit, and push based on current repo status.
-Each successful sync creates a snapshot version tag. You can open **Version History** in the **Library**, inspect the timeline, and restore any snapshot as a new commit.
+Each successful sync creates a snapshot version tag. You can open **Version History** in **Skills**, inspect the timeline, and restore any snapshot as a new commit.
 
 ### Authentication
 
@@ -107,7 +130,7 @@ You can also add custom tools in **Settings** and manage their skills the same w
 
 ## In-App Help
 
-The **Help** button in **Settings** mirrors the current product flow: recommended workflows, presets, skill installation, the Library (with the Untagged filter and per-card delete), the Global Workspace and the **+ Add Skills** sheet, Project Workspaces with the multi-agent target picker, Git backup, and environment-level settings (including Export Logs for issue reports). It is intended as the in-app version of this quick-start guide.
+The **Help** button in **Settings** mirrors the current product flow: the sidebar model, recommended workflows, presets, skill installation, the Library, the singleton Environment, the Global Workspace and the **+ Add Skills** sheet, Project Workspaces, Git backup, and environment-level settings. It is intended as the in-app version of this quick-start guide.
 
 ## Tech Stack
 
@@ -235,7 +258,7 @@ npm run cli:build
 
 ### macOS: Gatekeeper blocks the app on first launch
 
-Skills Manager is ad-hoc signed but not notarized (no paid Apple Developer ID), so macOS Gatekeeper will warn the first time you open it.
+AgentPort is ad-hoc signed but not notarized (no paid Apple Developer ID), so macOS Gatekeeper will warn the first time you open it.
 
 - **"App can't be opened because it is from an unidentified developer"** (releases from v1.20.0 onward) — Right-click the app in Finder and choose **Open**, then confirm in the dialog. Or open **System Settings → Privacy & Security** and click **Open Anyway** after the first failed launch.
 - **"App is damaged and can't be opened"** (releases up to and including v1.19.0) — Run this in Terminal, then open the app again:

@@ -4,15 +4,16 @@
   },
   "sidebar": {
     "overview": "Overview",
-    "dashboard": "Dashboard",
+    "home": "Home",
+    "dashboard": "Home",
     "environment": "Environment",
     "library": "Library",
     "mySkills": "Skills",
     "globalWorkspace": "Global Workspace",
     "lobsterAgents": "Lobster Agents",
     "installSkills": "Install Skills",
-    "environmentModel": "Environment Model",
-    "agentport": "Environment",
+    "agentport": "Environment Overview",
+    "agentportOverview": "Overview",
     "agentportPackages": "Packages",
     "agentportProfiles": "Profiles",
     "agentportArtifacts": "Artifacts",
@@ -27,8 +28,8 @@
   },
   "help": {
     "eyebrow": "Guide",
-    "title": "Quick Start for Skills Manager",
-    "description": "Fastest path: install skills → open Global Workspace → click a Preset pill to activate. Press ⌘K anytime for the command palette. Use Project Workspaces, Git backup, and Settings as needed.",
+    "title": "Quick Start for AgentPort",
+    "description": "Fastest path: install skills → review Home → apply skills in a workspace. Use Environment when you want portable state across agents or machines.",
     "items": {
       "workflows": {
         "title": "Recommended Workflows",
@@ -48,7 +49,7 @@
       },
       "global": {
         "title": "Global Workspace",
-        "description": "Each agent gets its own page listing every skill in its global folder — including ones installed outside Skills Manager — so the view matches what the agent actually sees. Use + Add Skills to pull from your central library with inline target-agent chips, or use the All Agents overview to manage every installed agent at once. Skills that only exist in an agent folder can be deleted directly from the card."
+        "description": "Each agent gets its own page listing every skill in its global folder — including ones installed outside AgentPort — so the view matches what the agent actually sees. Use + Add Skills to pull from your central library with inline target-agent chips, or use the All Agents overview to manage every installed agent at once. Skills that only exist in an agent folder can be deleted directly from the card."
       },
       "projects": {
         "title": "Project Workspaces",
@@ -79,16 +80,52 @@
     }
   },
   "dashboard": {
-    "greeting": "Hello!",
-    "summary": "{{skills}} Skills in Library · {{agents}} Agents connected · {{projects}} Projects",
-    "librarySkills": "Library Skills",
-    "syncCoverage": "Sync Coverage",
-    "connectedAgents": "Connected Agents",
-    "synced": "Synced",
-    "notSynced": "Not synced",
-    "scanImport": "Scan & Import Local Skills",
-    "installNew": "Install New Skills",
-    "recentActivity": "Recent Activity"
+    "title": "Home",
+    "summary": "{{environment}} environment · {{skills}} skills · {{agents}} agents · {{projects}} projects",
+    "refresh": "Refresh",
+    "environment": {
+      "loading": "Checking",
+      "ready": "Ready",
+      "needsInit": "Needs init",
+      "needsReview": "Needs review"
+    },
+    "cards": {
+      "environment": "Environment",
+      "environmentDetail": "{{profiles}} profiles · {{packages}} packages · {{artifacts}} artifacts · {{issues}} issues",
+      "library": "Library",
+      "skillCount": "{{count}} skills",
+      "libraryDetail": "{{synced}} synced · {{updates}} updates · {{untagged}} untagged",
+      "workspaces": "Workspaces",
+      "agentProjectCount": "{{agents}} agents · {{projects}} projects",
+      "workspaceDetail": "{{issues}} project sync issues"
+    },
+    "attention": {
+      "title": "Needs Attention",
+      "environmentMissing": "Environment manifest is missing",
+      "environmentMissingDetail": "Initialize the singleton environment before syncing across machines.",
+      "environmentReview": "Environment needs review",
+      "environmentReviewDetail": "{{count}} manifest warning(s) or diff issue(s)",
+      "skillUpdates": "Skill updates available",
+      "skillUpdatesDetail": "{{count}} skill(s) can be updated from source",
+      "projectDrift": "Project workspace drift",
+      "projectDriftDetail": "{{count}} project skill sync issue(s)",
+      "noAgents": "No enabled agents",
+      "noAgentsDetail": "Enable at least one coding agent target in Settings.",
+      "noSkills": "No skills in the library",
+      "noSkillsDetail": "Install or import skills to start building your agent environment.",
+      "clear": "No attention needed",
+      "clearDetail": "The current library, environment, and workspaces have no blocking issues."
+    },
+    "quickActions": "Quick Actions",
+    "actions": {
+      "install": "Install Skills",
+      "scan": "Scan Local",
+      "environment": "Environment",
+      "diff": "Diff"
+    },
+    "recentSkills": "Recent Skills",
+    "skillSynced": "Synced to {{tools}}",
+    "skillNotSynced": "Not synced"
   },
   "agentport": {
     "title": "AgentPort",
@@ -762,7 +799,7 @@
     "language": "Language",
     "help": "Help",
     "about": "About",
-    "version": "Skills Manager 1.22.1",
+    "version": "AgentPort 1.22.1",
     "tagline": "Cross-platform. Minimal, efficient, seamless multi-preset switching.",
     "checkUpdate": "Check for Updates",
     "checking": "Checking…",
@@ -782,7 +819,7 @@
     "exportLogsHint": "Bundle recent logs and activity history as a zip in your Downloads folder",
     "exportLogsDone": "Logs exported ({{count}} file(s)). Drag the zip into your GitHub issue.",
     "exportLogsFailed": "Failed to export logs.",
-    "panicBanner": "Skills Manager crashed during the last session ({{time}}).",
+    "panicBanner": "AgentPort crashed during the last session ({{time}}).",
     "panicDismiss": "Dismiss",
     "gitBackup": "Git Sync",
     "gitBackupDesc": "Back up your skill library to a Git repository for version control and multi-machine sync.",

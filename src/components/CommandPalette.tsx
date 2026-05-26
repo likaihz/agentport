@@ -152,7 +152,7 @@ export function CommandPalette() {
       {
         id: "action:dashboard",
         kind: "action",
-        label: t("sidebar.dashboard"),
+        label: t("sidebar.home"),
         icon: <Home className="h-3.5 w-3.5" />,
         run: () => navigate("/"),
       },
@@ -180,7 +180,7 @@ export function CommandPalette() {
       {
         id: "action:agentport",
         kind: "action",
-        label: t("sidebar.agentport"),
+        label: t("sidebar.agentportOverview"),
         icon: <FileCode2 className="h-3.5 w-3.5" />,
         run: () => navigate("/agentport"),
       },
